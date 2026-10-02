@@ -28,3 +28,12 @@ Format per entry: task attempted, steps taken, expected vs actual, severity, wor
 - **Severity:** Low.
 - **Workaround:** Annotate returns as `dict[str, Any]`.
 - **Suggestion:** Emit structured content for plain `dict` returns, or warn at registration that no output schema was inferred.
+
+## F-004: scipy `milp` first import is slow and silent
+- **Task attempted:** Integer-hour task split for care mode (maximise hours covered, then spread load).
+- **Steps taken:** Used `scipy.optimize.milp` (HiGHS) in a unit-test suite.
+- **Expected:** Tests on tiny problems finish in well under a second.
+- **Actual:** The first test run took about 12 s with no output; later runs were 0.3 s for 80 solves. Cold-import and bytecode compilation, not the solver.
+- **Severity:** Low.
+- **Workaround:** None needed; noted so CI timing is not misread.
+- **Suggestion:** None for the library; recording for honesty about the dev loop.

@@ -3,6 +3,7 @@ or Y's exact bucket next to Y's name. Covers every REST route and every MCP tool
 import json
 
 import httpx
+import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
@@ -12,8 +13,11 @@ from server.engine import privacy
 # Distinctive sentinels: dollars no band edge or option price can equal; fractional hours
 # so a whole-hour task assignment can never coincide with them.
 EVERYDAY = {"Maya": 437, "Ben": 613, "Chen": 829}
-SENTINELS = {n: [v] for n, v in EVERYDAY.items()}
-BUCKETS = {n: [privacy.money_bucket(v)] for n, v in EVERYDAY.items()}
+CARE_HOURS = {"Maya": 13.5, "Ben": 17.5, "Chen": 11.5}
+CARE_DOLLARS = {"Maya": 437, "Ben": 613, "Chen": 829}
+SENTINELS = {n: [EVERYDAY[n], CARE_HOURS[n]] for n in EVERYDAY}
+BUCKETS = {n: [privacy.money_bucket(EVERYDAY[n]), privacy.hours_bucket(CARE_HOURS[n])]
+           for n in EVERYDAY}
 
 # Routes/tools exercised below; the meta-test fails if a new one is added without coverage.
 COVERED_ROUTES = {"/api/health", "/api/rounds", "/api/status", "/api/answers", "/me/answers",
@@ -27,6 +31,15 @@ def _answer(v):
             "dealbreakers": []}
 
 
+def _care_answer(name):
+    return {"consent": True, "hours_per_week": CARE_HOURS[name],
+            "dollars_per_month": CARE_DOLLARS[name], "dealbreakers": ["nights"]}
+
+
+MODE_CASES = [("everyday", lambda n: _answer(EVERYDAY[n]), lambda n: str(EVERYDAY[n])),
+              ("care", _care_answer, lambda n: str(CARE_HOURS[n]))]
+
+
 def _check(label, body, viewer):
     leaks = privacy.find_leaks(body, SENTINELS, viewer) + \
         privacy.find_attributed_buckets(body, BUCKETS, viewer)
@@ -38,11 +51,12 @@ def test_every_rest_route_is_covered():
     assert paths == COVERED_ROUTES
 
 
-async def test_leak_rest_every_route_every_participant(fresh_db):
+@pytest.mark.parametrize("mode,make_answer,own_marker", MODE_CASES)
+async def test_leak_rest_every_route_every_participant(fresh_db, mode, make_answer, own_marker):
     transport = httpx.ASGITransport(app=api.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = (await c.post("/api/rounds", json={
-            "mode": "everyday", "deadline_seconds": 3600,
+            "mode": mode, "deadline_seconds": 3600,
             "participants": [{"name": n} for n in EVERYDAY]})).json()
         toks = {p["name"]: p["token"] for p in r["participants"]}
         calls = []  # (label, response) gathered before and after submission and close
@@ -55,7 +69,7 @@ async def test_leak_rest_every_route_every_participant(fresh_db):
                     resp = await getattr(c, method)(path, params={"token": tok})
                     if path == "/me/answers":
                         answered = stage == "closed" or (stage == "partial" and viewer != "Chen")
-                        assert (str(EVERYDAY[viewer]) in resp.text) == answered  # owner only
+                        assert (own_marker(viewer) in resp.text) == answered  # owner only
                         continue
                     calls.append((f"{stage} {path}", resp.text, viewer))
             for label, body, viewer in calls:
@@ -65,11 +79,11 @@ async def test_leak_rest_every_route_every_participant(fresh_db):
         await sweep("start")
         for name in ("Maya", "Ben"):
             resp = await c.post("/api/answers", json={"token": toks[name],
-                                                      "answer": _answer(EVERYDAY[name])})
+                                                      "answer": make_answer(name)})
             _check("submit", resp.text, name)
         await sweep("partial")
         resp = await c.post("/api/answers", json={"token": toks["Chen"],
-                                                  "answer": _answer(EVERYDAY["Chen"])})
+                                                  "answer": make_answer("Chen")})
         _check("submit", resp.text, "Chen")
         await sweep("closed")
         for viewer, tok in toks.items():

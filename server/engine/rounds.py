@@ -14,9 +14,9 @@ from sqlmodel import Session, select
 
 from .. import config
 from ..db import Answer, Participant, Round
-from . import everyday, privacy
+from . import care, everyday, privacy
 
-MODES = {"everyday": everyday}
+MODES = {"everyday": everyday, "care": care}
 CHANNELS = ("voice", "link")
 
 
@@ -94,7 +94,10 @@ def create_round(s: Session, mode: str, participants: list[dict], deadline_secon
             raise HuddleError("bad_participants", f"channel must be one of {CHANNELS}.")
     if not 10 <= deadline_seconds <= 14 * 86400:
         raise HuddleError("bad_deadline", "deadline_seconds must be between 10 and 14 days.")
-    need = getattr(m, "validate_need", lambda n: {})(need)
+    try:
+        need = getattr(m, "validate_need", lambda n: {})(need)
+    except ValueError as e:  # includes pydantic.ValidationError
+        raise HuddleError("bad_need", str(e)) from None
 
     deadline = now + timedelta(seconds=deadline_seconds)
     rnd = Round(id=secrets.token_hex(4), mode=mode, created_at=now, need=need,

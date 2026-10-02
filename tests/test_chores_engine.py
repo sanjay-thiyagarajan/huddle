@@ -1,4 +1,5 @@
 """The fairness engine: hard limits, fairness, preferences, rotation, ledger, exemptions."""
+
 import random
 
 import pytest
@@ -19,6 +20,7 @@ def owners(out):
 
 
 # ---- hard limits -------------------------------------------------------------------------------------
+
 
 def test_cannot_capacity_and_exempt_are_never_violated():
     chs = [chore("a", 60, "cooking"), chore("b", 60, "yard", 3), chore("c", 120, "repairs", 3)]
@@ -44,12 +46,15 @@ def test_people_needed_staffs_a_chore_with_different_people():
 
 
 def test_nobody_can_do_it_is_reported_not_forced():
-    out = ch.plan([chore("x", 30, "repairs", 3)], [member("a", prefs={"repairs": "cannot"}),
-                                                    member("b", prefs={"repairs": "cannot"})])
+    out = ch.plan(
+        [chore("x", 30, "repairs", 3)],
+        [member("a", prefs={"repairs": "cannot"}), member("b", prefs={"repairs": "cannot"})],
+    )
     assert out.assign["x"] == [] and out.report["unstaffed"] == ["x"]
 
 
 # ---- fairness -----------------------------------------------------------------------------------------
+
 
 def test_equal_availability_gives_an_even_split():
     chs = [chore(f"c{i}", 30) for i in range(8)]
@@ -93,8 +98,11 @@ def test_fairness_beats_preferences():
     """Two people love dishes and one avoids them, but fairness comes first: the one who avoids them still
     takes a turn, and nobody takes more than two of the four."""
     chs = [chore(f"d{i}", 30, "dishes") for i in range(4)]
-    ms = [member("a", prefs={"dishes": "love"}), member("b", prefs={"dishes": "love"}),
-          member("c", prefs={"dishes": "avoid"})]
+    ms = [
+        member("a", prefs={"dishes": "love"}),
+        member("b", prefs={"dishes": "love"}),
+        member("c", prefs={"dishes": "avoid"}),
+    ]
     out = ch.plan(chs, ms)
     counts = {m.id: sum(1 for c in chs if m.id in out.assign[c.id]) for m in ms}
     assert counts["c"] >= 1 and max(counts.values()) <= 2
@@ -119,11 +127,14 @@ def test_last_week_felt_overloaded_lightens_this_week():
 
 # ---- preferences, skills, learning --------------------------------------------------------------------
 
+
 def test_preferences_and_skills_decide_between_equally_fair_splits():
     chs = [chore("cook", 30, "cooking"), chore("bills", 30, "admin"), chore("fix tap", 30, "repairs")]
-    ms = [member("a", prefs={"cooking": "love"}, skills={"repairs": 2}, keywords=["tap"]),
-          member("b", prefs={"admin": "love", "cooking": "avoid"}),
-          member("c", prefs={"repairs": "avoid"})]
+    ms = [
+        member("a", prefs={"cooking": "love"}, skills={"repairs": 2}, keywords=["tap"]),
+        member("b", prefs={"admin": "love", "cooking": "avoid"}),
+        member("c", prefs={"repairs": "avoid"}),
+    ]
     out = ch.plan(chs, ms)
     own = owners(out)
     # Every split gives each person one 30-minute chore (equally fair). The best match is:
@@ -147,6 +158,7 @@ def test_wanting_to_learn_is_a_gentle_nudge():
 
 # ---- rotation -----------------------------------------------------------------------------------------
 
+
 def test_a_heavy_chore_rotates_when_someone_else_can_take_it():
     chs = [chore("garage", 60, "yard", 3), chore("light", 30)]
     ms = [member("a"), member("b")]
@@ -167,35 +179,61 @@ def test_rotation_never_overrides_a_hard_limit():
 
 # ---- ranking for ad-hoc chores ------------------------------------------------------------------------
 
+
 def test_candidate_ranking_prefers_the_fairest_then_the_best_match():
     ms = [member("a"), member("b"), member("c")]
     c = chore("new", 40, "cooking")
-    ranked = ch.rank_candidates(c, ms, loads={"a": 100.0, "b": 20.0, "c": 100.0},
-                                shares={"a": 1 / 3, "b": 1 / 3, "c": 1 / 3}, total=220.0)
+    ranked = ch.rank_candidates(
+        c,
+        ms,
+        loads={"a": 100.0, "b": 20.0, "c": 100.0},
+        shares={"a": 1 / 3, "b": 1 / 3, "c": 1 / 3},
+        total=220.0,
+    )
     assert ranked[0] == "b"  # lowest load takes it
     ms2 = [member("a", prefs={"cooking": "love"}), member("b", prefs={"cooking": "love"})]
-    ranked2 = ch.rank_candidates(c, ms2, loads={"a": 0.0, "b": 0.0}, shares={"a": .5, "b": .5}, total=0.0)
+    ranked2 = ch.rank_candidates(c, ms2, loads={"a": 0.0, "b": 0.0}, shares={"a": 0.5, "b": 0.5}, total=0.0)
     assert set(ranked2) == {"a", "b"}
 
 
 def test_ranking_skips_excluded_cannot_exempt_and_over_capacity():
-    ms = [member("a", prefs={"cooking": "cannot"}), member("b", exempt=True), member("c", 30),
-          member("d"), member("e")]
+    ms = [
+        member("a", prefs={"cooking": "cannot"}),
+        member("b", exempt=True),
+        member("c", 30),
+        member("d"),
+        member("e"),
+    ]
     ranked = ch.rank_candidates(chore("x", 45, "cooking"), ms, loads={}, shares={}, total=0.0, exclude={"e"})
     assert ranked == ["d"]
 
 
 # ---- properties over random households ---------------------------------------------------------------
 
+
 def test_random_households_never_break_hard_limits_and_stay_reasonably_fair():
     rng = random.Random(11)
     cats = ch.CATEGORIES
     for _ in range(25):
-        chs = [chore(f"c{i}", rng.choice([10, 20, 30, 45, 60]), rng.choice(cats), rng.randint(1, 3),
-                     need=rng.choice([1, 1, 1, 2])) for i in range(rng.randint(3, 14))]
-        ms = [member(f"m{i}", rng.randint(60, 400),
-                     prefs={rng.choice(cats): rng.choice(["avoid", "cannot", "love"])},
-                     exempt=(rng.random() < 0.1)) for i in range(rng.randint(2, 5))]
+        chs = [
+            chore(
+                f"c{i}",
+                rng.choice([10, 20, 30, 45, 60]),
+                rng.choice(cats),
+                rng.randint(1, 3),
+                need=rng.choice([1, 1, 1, 2]),
+            )
+            for i in range(rng.randint(3, 14))
+        ]
+        ms = [
+            member(
+                f"m{i}",
+                rng.randint(60, 400),
+                prefs={rng.choice(cats): rng.choice(["avoid", "cannot", "love"])},
+                exempt=(rng.random() < 0.1),
+            )
+            for i in range(rng.randint(2, 5))
+        ]
         out = ch.plan(chs, ms)
         for m in ms:
             mine = [c for c in chs if m.id in out.assign[c.id]]
@@ -209,10 +247,12 @@ def test_random_households_never_break_hard_limits_and_stay_reasonably_fair():
 
 # ---- work already assigned this week counts toward a fair share -----------------------------------------
 
+
 def test_mid_week_additions_are_fair_relative_to_what_people_already_have():
     new = [chore(f"n{i}", 10) for i in range(6)]  # 60 minutes of new work
-    out = ch.plan(new, [member("a"), member("b")], base_load={"a": 120.0, "b": 0.0},
-                  base_minutes={"a": 120, "b": 0})
+    out = ch.plan(
+        new, [member("a"), member("b")], base_load={"a": 120.0, "b": 0.0}, base_minutes={"a": 120, "b": 0}
+    )
     # a already holds 120 of the 180 total, so b takes ALL the new work. That leaves a 30-minute gap either
     # side of a fair 90 each (33% of an average share): the best any split can do from here.
     assert out.loads == {"a": 0.0, "b": 60.0}
@@ -220,6 +260,47 @@ def test_mid_week_additions_are_fair_relative_to_what_people_already_have():
 
 
 def test_assigned_minutes_use_up_availability():
-    out = ch.plan([chore("x", 50)], [member("a", 100), member("b", 100)],
-                  base_load={"a": 80.0}, base_minutes={"a": 80, "b": 0})
+    out = ch.plan(
+        [chore("x", 50)],
+        [member("a", 100), member("b", 100)],
+        base_load={"a": 80.0},
+        base_minutes={"a": 80, "b": 0},
+    )
     assert out.assign["x"] == ["b"]  # a has only 20 minutes left
+
+
+def test_when_one_person_is_already_over_their_share_everyone_else_is_still_balanced():
+    """Leximin: Maya's gap can't shrink (she already carries far more than her share), but that must not
+    make the rest of the split arbitrary. The remaining work is shared evenly between the others."""
+    new = [chore(f"n{i}", 30) for i in range(6)]
+    out = ch.plan(
+        new,
+        [member("maya"), member("ben"), member("chen")],
+        base_load={"maya": 700.0},
+        base_minutes={"maya": 480},
+    )
+    assert out.loads["maya"] == 0.0
+    assert out.loads["ben"] == out.loads["chen"] == 90.0
+
+
+def test_several_people_over_their_share_are_each_handled_in_turn():
+    new = [chore(f"n{i}", 20) for i in range(9)]
+    out = ch.plan(
+        new,
+        [member("a"), member("b"), member("c"), member("d")],
+        base_load={"a": 600.0, "b": 400.0},
+        base_minutes={"a": 300, "b": 200},
+    )
+    assert out.loads["a"] == 0.0
+    assert out.loads["c"] == pytest.approx(out.loads["d"], abs=20.0)  # the two with room share it evenly
+    assert out.loads["b"] <= out.loads["c"]
+
+
+def test_someone_whose_existing_load_exceeds_their_availability_does_not_sink_the_plan():
+    """E.g. 8 h of care already taken on against 4 h of stated chore time: they just get nothing new."""
+    new = [chore(f"n{i}", 30) for i in range(4)]
+    out = ch.plan(
+        new, [member("a", 240), member("b"), member("c")], base_load={"a": 700.0}, base_minutes={"a": 480}
+    )
+    assert out.loads["a"] == 0.0 and out.loads["b"] > 0 and out.loads["c"] > 0
+    assert out.report["unstaffed"] == []

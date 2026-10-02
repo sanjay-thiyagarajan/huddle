@@ -86,6 +86,10 @@ _HOME_LINES = {
     "proposal": "Someone is asking if you can take '{title}'. You can accept or decline it on your page.",
     "plan": "This week's chore plan is ready. Have a look at your part.",
     "due": "'{title}' is due soon.",
+    "decision": (
+        "A family decision is waiting for your private answer: {title}. "
+        "It takes about two minutes and nobody else sees it."
+    ),
     "nudge": "A request for '{title}' has been waiting. If you don't answer it will go to someone else.",
 }
 

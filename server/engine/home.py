@@ -13,7 +13,22 @@ from datetime import date, datetime, timedelta
 from sqlmodel import Session, select
 
 from .. import config, notify
-from ..db import Assignment, Chore, Contact, Home, HomeEvent, HomePlan, Member, MemberProfile, WeekFelt
+from ..db import (
+    Assignment,
+    Chore,
+    Contact,
+    Home,
+    HomeEvent,
+    HomePlan,
+    Member,
+    MemberProfile,
+    Participant,
+    ParticipantMember,
+    Round,
+    RoundHome,
+    WeekFelt,
+)
+from . import care, rounds
 from . import chores as ch
 from .rounds import HuddleError, _parse_token, make_token, now_utc
 
@@ -184,6 +199,58 @@ def _loads(
             burden[owner] = burden.get(owner, 0.0) + _burden(chores[a.chore_id], a.minutes)
             minutes[owner] = minutes.get(owner, 0) + a.minutes
     return burden, minutes
+
+
+def _care_commitments(s: Session, home_id: str) -> dict[str, tuple[int, float]]:
+    """Weekly care each member has taken on: {member_id: (minutes, burden)}.
+
+    Built ONLY from what the household already sees about the latest closed care plan: who owns each care
+    task and the task's total hours. A task with several owners is split evenly as an estimate. Each
+    person's private hours are never used, so this leaks nothing the ownership list doesn't already show.
+    """
+    latest, when = None, None
+    for link in s.exec(select(RoundHome).where(RoundHome.home_id == home_id)):
+        r = s.get(Round, link.round_id)
+        if not r or r.mode != "care" or r.state != "closed" or not r.result:
+            continue
+        if when is None or r.created_at > when:
+            latest, when = r, r.created_at
+    if latest is None:
+        return {}
+    tasks = {t["id"]: t for t in (latest.need or {}).get("tasks", [])}
+    owners: dict[str, int] = {}
+    for a in latest.result.get("assignments", []):
+        for t in a["tasks"]:
+            owners[t["task_id"]] = owners.get(t["task_id"], 0) + 1
+    by_name = {m.name.lower(): m.id for m in _members(s, home_id)}
+    out: dict[str, tuple[int, float]] = {}
+    for a in latest.result.get("assignments", []):
+        mid = by_name.get(a["name"].lower())
+        if mid is None:
+            continue
+        minutes, burden = 0.0, 0.0
+        for t in a["tasks"]:
+            task = tasks.get(t["task_id"])
+            if task is None:
+                continue
+            mins = task["hours"] * 60 / owners[t["task_id"]]
+            minutes += mins
+            burden += mins * (1.5 if task["type"] in care.HEAVY_TYPES else 1.25)
+        if minutes > 0:
+            out[mid] = (round(minutes), burden)
+    return out
+
+
+def _loads_with_care(
+    s: Session, home_id: str, rows: list[Assignment], chores: dict[str, Chore], skip: int | None = None
+):
+    """Work already carried this week: chores, plus the care each person has taken on."""
+    burden, minutes = _loads(s, rows, chores, skip)
+    care_load = _care_commitments(s, home_id)
+    for mid, (mins, b) in care_load.items():
+        burden[mid] = burden.get(mid, 0.0) + b
+        minutes[mid] = minutes.get(mid, 0) + mins
+    return burden, minutes, care_load
 
 
 def _notify(s: Session, home: Home, member: Member, kind: str, title: str, now: datetime, deliver) -> None:
@@ -491,7 +558,7 @@ def _plan_core(
     members = _members(s, home.id)
     prior, last_owner = _history(s, home.id, week, chores)
     min_in = [_member_in(s, m, week, prior.get(m.id, 0.0)) for m in members]
-    base_load, base_min = _loads(s, rows, chores)
+    base_load, base_min, care_load = _loads_with_care(s, home.id, rows, chores)
     to_plan = []
     for c in sorted(active, key=lambda c: c.id):
         missing = c.people_needed - held.get(c.id, 0)
@@ -531,6 +598,7 @@ def _plan_core(
     report = dict(out.report)
     report["unstaffed"] = [by_id[i].title for i in report["unstaffed"] if i in by_id]
     report["exempt_count"] = sum(1 for m in min_in if m.exempt)
+    report["care_counted"] = bool(care_load)
     existing = s.exec(
         select(HomePlan).where(HomePlan.home_id == home.id, HomePlan.week == week.isoformat())
     ).first()
@@ -566,7 +634,7 @@ def _propose(s: Session, home: Home, a: Assignment, chore: Chore, week: date, no
     members = _members(s, home.id)
     prior, last = _history(s, home.id, week, chores)
     min_in = [_member_in(s, m, week, prior.get(m.id, 0.0)) for m in members]
-    burden, minutes = _loads(s, rows, chores, skip=a.id)
+    burden, minutes, _ = _loads_with_care(s, home.id, rows, chores, skip=a.id)
     plan = s.exec(
         select(HomePlan).where(HomePlan.home_id == home.id, HomePlan.week == week.isoformat())
     ).first()
@@ -820,7 +888,7 @@ def get_state(s: Session, token: str, now: datetime | None = None) -> dict:
         if a.status == "proposed" and a.proposed_to == me.id and a.chore_id in chores
     ]
     profile = _profile(s, me.id)
-    burden, _ = _loads(s, rows, chores)
+    burden, _, care_load = _loads_with_care(s, home.id, rows, chores)
     total = sum(burden.values())
     share = (plan.shares.get(me.id, 0.0) if plan else 0.0) * total
     mine_burden = burden.get(me.id, 0.0)
@@ -854,10 +922,13 @@ def get_state(s: Session, token: str, now: datetime | None = None) -> dict:
             "load": {
                 "minutes": sum(a.minutes for a in mine_rows),
                 "availability": profile.availability,
+                "care_minutes": care_load.get(me.id, (0, 0.0))[0],
                 "vs_fair_share_pct": round((mine_burden - share) / share * 100) if share > 0 else None,
             },
             "nudges": _nudges(s, me, profile, rows, mine_burden, share),
+            "decisions": _decisions(s, home, me, now),
         },
+        "plans_so_far": rounds.closed_plans(s, home.id),
         "events": [
             {"at": e.at.isoformat(), "kind": e.kind, "actor": e.actor, "detail": e.detail}
             for e in s.exec(
@@ -890,6 +961,8 @@ def _headline(report: dict) -> str:
         parts.append("Planning and admin tasks are shared.")
     if report.get("unstaffed"):
         parts.append(f"{len(report['unstaffed'])} chore(s) still need someone.")
+    if report.get("care_counted"):
+        parts.append("Care already taken on is counted in everyone's share.")
     if report.get("exempt_count"):
         parts.append(f"{report['exempt_count']} person is exempt this week.")
     return " ".join(parts)
@@ -1045,3 +1118,107 @@ def say(
     return reply(
         "I can add a chore, tell you what's on your plate, mark something done, hand one back, or tell you who has a chore."
     )
+
+
+# ---- family decisions, started from the household -----------------------------------------------------------
+
+_DECISION_TITLE = {"care": "sharing a parent's care", "everyday": "a weekend plan", "trip": "a trip"}
+
+
+def start_decision(
+    s: Session,
+    token: str,
+    mode: str,
+    deadline_seconds: int = 3600,
+    need: dict | None = None,
+    remote: list[str] | None = None,
+    now: datetime | None = None,
+    deliver=notify.deliver_home,
+) -> dict:
+    """Start a family decision (care, weekend or trip) for the whole household: the same people, no retyping,
+    each answering privately with their own link. Their emails (if given) carry over for reminders. The
+    decision joins the household's history, so the fair-share record and care-load hints continue."""
+    now = now or now_utc()
+    me, home = _auth(s, token, now)
+    members = _members(s, home.id)
+    ordered = [me] + [m for m in members if m.id != me.id]  # the starter is the host
+    remote = {n.lower() for n in (remote or [])}
+    people = []
+    for m in ordered:
+        contact = s.get(Contact, "m" + m.id)
+        entry = {"name": m.name, "channel": "link" if m.name.lower() in remote else "voice"}
+        if contact:
+            entry["email"] = contact.email  # server-side only; round reminders can then reach them
+        people.append(entry)
+    created = rounds.create_round(
+        s,
+        mode,
+        people,
+        deadline_seconds,
+        need,
+        now,
+        household_id=home.id,
+        detail=f"household decision ({mode})",
+    )
+    s.add(RoundHome(round_id=created["round_id"], home_id=home.id))
+    by_name = {
+        p.name: p for p in s.exec(select(Participant).where(Participant.round_id == created["round_id"]))
+    }
+    for m in ordered:
+        s.add(ParticipantMember(participant_id=by_name[m.name].id, member_id=m.id))
+    _log(s, home.id, "decision_started", now, actor=me.name, detail=mode)
+    s.commit()
+    for m in ordered[1:]:
+        _notify(s, home, m, "decision", _DECISION_TITLE.get(mode, mode), now, deliver)
+    mine = next(p for p in created["participants"] if p["name"] == me.name)
+    return {
+        "round_id": created["round_id"],
+        "mode": mode,
+        "deadline_at": created["deadline_at"],
+        "my_token": mine["token"],
+        "my_link": mine["link"],
+    }
+
+
+def _decisions(s: Session, home: Home, me: Member, now: datetime) -> list[dict]:
+    """The caller's own view of the household's decisions: open ones, and recently closed ones. Each carries
+    only the caller's own round token. Others' tokens are never included."""
+    out = []
+    for link in s.exec(select(RoundHome).where(RoundHome.home_id == home.id)):
+        rnd = s.get(Round, link.round_id)
+        if rnd is None:
+            continue
+        rnd = rounds.advance(s, rnd, now)
+        pm = s.exec(
+            select(ParticipantMember).where(
+                ParticipantMember.member_id == me.id,
+                ParticipantMember.participant_id.in_(
+                    [p.id for p in s.exec(select(Participant).where(Participant.round_id == rnd.id))]
+                ),
+            )
+        ).first()
+        if pm is None:
+            continue
+        answers = rounds._answers(s, rnd.id)
+        parts = list(s.exec(select(Participant).where(Participant.round_id == rnd.id)))
+        done = sum(1 for p in parts if p.id in answers and not answers[p.id].is_default)
+        tok = make_token(pm.participant_id, rnd.deadline_at + timedelta(days=1))
+        out.append(
+            {
+                "round_id": rnd.id,
+                "mode": rnd.mode,
+                "title": _DECISION_TITLE.get(rnd.mode, rnd.mode),
+                "state": rnd.state,
+                "deadline_at": rnd.deadline_at.isoformat(),
+                "answered": pm.participant_id in answers and not answers[pm.participant_id].is_default,
+                "answered_count": done,
+                "of": len(parts),
+                "token": tok,
+                "link": f"/r/{tok}",
+                "created": rnd.created_at.isoformat(),
+            }
+        )
+    out.sort(key=lambda d: d["created"], reverse=True)
+    open_ = [d for d in out if d["state"] != "closed"]
+    closed = [d for d in out if d["state"] == "closed"][:3]
+    return open_ + closed

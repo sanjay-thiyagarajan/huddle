@@ -460,11 +460,10 @@ def _hints(s: Session, rnd: Round, p: Participant) -> list[dict]:
     }]
 
 
-def household_history(s: Session, token: str, now: datetime | None = None) -> dict:
-    """The household's closed plans, oldest first. Aggregate only: the same things already shown to all."""
-    p, rnd = _auth(s, token, now or now_utc())
+def closed_plans(s: Session, household_id: str) -> list[dict]:
+    """A household's closed plans, oldest first. Aggregate only: the same things already shown to all."""
     items = []
-    for link in s.exec(select(RoundHousehold).where(RoundHousehold.household_id == _household(s, rnd.id))):
+    for link in s.exec(select(RoundHousehold).where(RoundHousehold.household_id == household_id)):
         r = s.get(Round, link.round_id)
         if not r or r.state != "closed" or not r.result:
             continue
@@ -482,7 +481,13 @@ def household_history(s: Session, token: str, now: datetime | None = None) -> di
                       "summary": summary, "at": closed.isoformat(),
                       "checkin": checkin.get("message") if checkin.get("complete") else None})
     items.sort(key=lambda i: i["at"])
-    return {"plans": items}
+    return items
+
+
+def household_history(s: Session, token: str, now: datetime | None = None) -> dict:
+    """The household's closed plans, oldest first. Aggregate only: the same things already shown to all."""
+    p, rnd = _auth(s, token, now or now_utc())
+    return {"plans": closed_plans(s, _household(s, rnd.id))}
 
 
 def plan_card(s: Session, token: str, now: datetime | None = None) -> dict:

@@ -26,7 +26,8 @@ TOOLS = {"start_huddle", "submit_private_answer", "get_group_result", "close_rou
          "submit_checkin", "revisit_round",
          # the household
          "create_household", "get_household", "set_my_profile", "add_chore", "plan_week",
-         "respond_to_assignment", "hand_back_chore", "complete_chore", "week_checkin", "ask_household_agent"}
+         "respond_to_assignment", "hand_back_chore", "complete_chore", "week_checkin", "ask_household_agent",
+         "start_household_decision"}
 
 
 def mcp_url() -> str:

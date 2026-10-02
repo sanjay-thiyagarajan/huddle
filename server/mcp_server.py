@@ -160,3 +160,12 @@ def ask_household_agent(token: str, utterance: str) -> dict[str, Any]:
     """Talk to the household agent in plain words: add a chore, 'what's on my plate', 'I did the bins', 'who has
     the laundry', 'hand back the laundry'. Replies never speak anyone's private preferences."""
     return _run(home.say, token, utterance)
+
+
+@mcp.tool()
+def start_household_decision(token: str, mode: str, deadline_seconds: int = 3600, need: dict | None = None,
+                             remote: list[str] | None = None) -> dict[str, Any]:
+    """Start a family decision (mode: care, everyday or trip) for the whole household: the same people, each
+    answering privately with their own link. The caller's own round token is returned; everyone else finds
+    theirs in their own get_household. For care, `need` is the task list and monthly money needed."""
+    return _run(home.start_decision, token, mode, deadline_seconds, need, remote)

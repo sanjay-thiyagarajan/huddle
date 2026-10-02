@@ -47,6 +47,7 @@ COVERED_ROUTES = {
     "/api/home/complete",
     "/api/home/checkin",
     "/api/home/say",
+    "/api/home/decision",
 }
 # Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
 VOICE_ROUTES = {
@@ -74,6 +75,7 @@ COVERED_TOOLS = {
     "complete_chore",
     "week_checkin",
     "ask_household_agent",
+    "start_household_decision",
 }
 
 
@@ -511,3 +513,84 @@ async def test_leak_household_mcp_every_tool(live_server):
                         {"token": t, "assignment_id": p["id"], "accept": False, "reason": "prefer_not"},
                         viewer,
                     )
+
+
+# ---- household decisions: round tokens and care hours never reach other members ------------------
+
+CARE_NEED_BODY = {
+    "tasks": [
+        {"id": "night", "label": "Overnight cover", "type": "overnight", "hours": 6},
+        {"id": "calls", "label": "Daily check-in", "type": "checkin", "hours": 2},
+    ],
+    "dollars_per_month": 300,
+}
+CARE_HOURS_SECRET = {"Maya": 13.5, "Ben": 17.5, "Chen": 11.5}
+
+
+async def test_leak_household_decisions_tokens_and_care_hours(live_server):
+    async with httpx.AsyncClient(base_url=live_server, timeout=60) as c:
+        made = (
+            await c.post(
+                "/api/home", json={"name": "Home", "members": [{"name": n} for n in CARE_HOURS_SECRET]}
+            )
+        ).json()
+        tok = {m["name"]: m["token"] for m in made["members"]}
+        started = (
+            await c.post(
+                "/api/home/decision", json={"token": tok["Maya"], "mode": "care", "need": CARE_NEED_BODY}
+            )
+        ).json()
+        assert set(started) == {"round_id", "mode", "deadline_at", "my_token", "my_link"}
+
+        async def states():
+            out = {}
+            for n, t in tok.items():
+                out[n] = (await c.get("/api/home/state", params={"token": t})).json()
+            return out
+
+        round_tokens = {n: s["mine"]["decisions"][0]["token"] for n, s in (await states()).items()}
+        assert len(set(round_tokens.values())) == 3
+
+        async def sweep(stage):
+            for viewer, t in tok.items():
+                raw = (await c.get("/api/home/state", params={"token": t})).text
+                said = (await c.post("/api/home/say", json={"token": t, "utterance": "what's the plan"})).text
+                for label, body in ((f"{stage} state", raw), (f"{stage} say", said)):
+                    for other, rt in round_tokens.items():
+                        if other != viewer:
+                            assert rt not in body, f"{label} as {viewer} exposed {other}'s round token"
+                    for who, hours in CARE_HOURS_SECRET.items():
+                        if who != viewer:
+                            assert str(hours) not in body, (
+                                f"{label} as {viewer} exposed {who}'s private hours"
+                            )
+
+        await sweep("open")
+        for n, rt in round_tokens.items():  # everyone answers privately with distinctive hours
+            r = await c.post(
+                "/api/answers",
+                json={
+                    "token": rt,
+                    "answer": {
+                        "consent": True,
+                        "hours_per_week": CARE_HOURS_SECRET[n],
+                        "dollars_per_month": 437,
+                        "dealbreakers": [],
+                    },
+                },
+            )
+            assert r.status_code == 200, r.text
+        await sweep("closed")
+
+        # care now counts in the chore plan: still no private hours anywhere
+        await c.post(
+            "/api/home/chores",
+            json={
+                "token": tok["Maya"],
+                "fields": {"title": "Dishes", "category": "dishes", "minutes": 20, "cadence": "weekly"},
+            },
+        )
+        await c.post("/api/home/plan", json={"token": tok["Maya"]})
+        await sweep("planned")
+        for n, s in (await states()).items():
+            assert s["mine"]["load"]["care_minutes"] >= 0

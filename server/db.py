@@ -187,6 +187,18 @@ class HomeEvent(SQLModel, table=True):
     detail: str | None = None
 
 
+class RoundHome(SQLModel, table=True):
+    """A family decision (round) started from a household."""
+    round_id: str = Field(primary_key=True)
+    home_id: str = Field(index=True)
+
+
+class ParticipantMember(SQLModel, table=True):
+    """Which household member a round participant is, so one identity spans chores and decisions."""
+    participant_id: str = Field(primary_key=True)
+    member_id: str = Field(index=True)
+
+
 class VoiceProfile(SQLModel, table=True):
     """Biometric stand-in data: enrolment embeddings per household profile (never raw audio)."""
 

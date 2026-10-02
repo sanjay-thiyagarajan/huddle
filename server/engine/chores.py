@@ -216,7 +216,6 @@ def plan(
     if n == 0 or not weights:
         return PlanOut(assign, {}, {}, loads, 0.0, why, _report(chores, assign, last_owner, 0.0))
 
-    m_index = {m.id: i for i, m in enumerate(active)}
     A_rows, hi = [], []
     for c in chores:  # a chore can be staffed by at most `people_needed` different people
         row = np.zeros(n + 1)
@@ -231,7 +230,9 @@ def plan(
             if mm.id == m.id:
                 row[k] = c.minutes
         A_rows.append(row)
-        hi.append(m.availability - base_minutes.get(m.id, 0))
+        hi.append(
+            max(0, m.availability - base_minutes.get(m.id, 0))
+        )  # never negative: it would sink the whole plan
     base_A, base_hi = np.array(A_rows), np.array(hi, dtype=float)
     integrality = np.r_[np.ones(n), 0]
     burden = np.array([c.burden for _, c in pairs])
@@ -248,32 +249,76 @@ def plan(
     covered = float(-r1.fun)
     targets = fair_targets(covered + sum(base_load.get(m.id, 0.0) for m in active), weights, prior)
 
-    # Stage 2: the smallest possible gap from anyone's fair share, without covering less.
+    # Stage 2: leximin. Minimise the largest gap from anyone's fair share without covering less, then lock in
+    # whoever is stuck at that gap (for example a person already carrying more than their share, whose gap no
+    # split can shrink) and minimise the largest gap among everyone else, and so on. Minimising only one
+    # largest gap would be blind to the rest of the household whenever one person's gap can't be reduced.
+    P = len(active)
+    nv = n + P + 1  # x (one per eligible person and chore), e_i (gap of person i), D (the largest gap)
+    iD = n + P
+    mean_t = sum(targets.values()) / len(targets)
     dev_rows, dev_hi = [], []
-    for m in active:
-        row = np.zeros(n + 1)
+    for i, m in enumerate(active):
+        row = np.zeros(nv)
         for k, (mm, c) in enumerate(pairs):
             if mm.id == m.id:
                 row[k] = c.burden
         up = row.copy()
-        up[n] = -1
+        up[n + i] = -1
         lo = -row
-        lo[n] = -1
-        dev_rows += [up, lo]
+        lo[n + i] = -1
         gap = targets[m.id] - base_load.get(m.id, 0.0)
+        dev_rows += [up, lo]
         dev_hi += [gap, -gap]
-    cover_row = np.r_[burden, 0]
-    cons2 = [
-        LinearConstraint(base_A, -np.inf, base_hi),
-        LinearConstraint(np.array(dev_rows), -np.inf, np.array(dev_hi)),
-        LinearConstraint(cover_row, covered - 1e-6, np.inf),
-    ]
-    c2 = np.zeros(n + 1)
-    c2[n] = 1
-    bounds2 = Bounds(np.zeros(n + 1), np.r_[np.ones(n), 1e9])
-    r2 = milp(c2, constraints=cons2, integrality=integrality, bounds=bounds2)
-    if not r2.success:
-        finish(r1.x, targets)
+    A_base = np.hstack([base_A, np.zeros((base_A.shape[0], nv - base_A.shape[1]))])
+    cover_row = np.zeros(nv)
+    cover_row[:n] = burden
+    integrality_v = np.r_[np.ones(n), np.zeros(P + 1)]
+
+    def run(objective, ub_e, extra=None):
+        cons = [
+            LinearConstraint(A_base, -np.inf, base_hi),
+            LinearConstraint(np.array(dev_rows), -np.inf, np.array(dev_hi)),
+            LinearConstraint(cover_row, covered - 1e-6, np.inf),
+            *(extra or []),
+        ]
+        ub = np.r_[np.ones(n), ub_e, 1e9]
+        return milp(objective, constraints=cons, integrality=integrality_v, bounds=Bounds(np.zeros(nv), ub))
+
+    tol_dev = max(0.01 * mean_t, 0.5)
+    fixed: dict[int, float] = {}
+    sol = None
+    while len(fixed) < P:
+        free = [i for i in range(P) if i not in fixed]
+        rows = []
+        for i in free:
+            r = np.zeros(nv)
+            r[n + i] = 1
+            r[iD] = -1
+            rows.append(r)
+        ub_e = np.array([fixed[i] + 1e-6 if i in fixed else 1e9 for i in range(P)])
+        c_obj = np.zeros(nv)
+        c_obj[iD] = 1
+        r2 = run(c_obj, ub_e, [LinearConstraint(np.array(rows), -np.inf, np.zeros(len(rows)))])
+        if not r2.success:
+            break
+        sol, d_level = r2, float(r2.x[iD])
+        stuck = []
+        for i in free:
+            if r2.x[n + i] < d_level - tol_dev:
+                continue  # already below the largest gap in this solution
+            c_i = np.zeros(nv)
+            c_i[n + i] = 1
+            ub_i = np.array([fixed[j] + 1e-6 if j in fixed else d_level + 1e-6 for j in range(P)])
+            r_i = run(c_i, ub_i)
+            if r_i.success and float(r_i.x[n + i]) >= d_level - tol_dev:
+                stuck.append(i)
+        if not stuck:  # numerical safety: lock the largest so the loop always finishes
+            stuck = [max(free, key=lambda i: r2.x[n + i])]
+        for i in stuck:
+            fixed[i] = d_level
+    if sol is None:
+        finish(r1.x[:n], targets)
         return PlanOut(
             assign,
             _shares(targets, sum(targets.values())),
@@ -283,22 +328,18 @@ def plan(
             why,
             _report(chores, assign, last_owner, 0.0),
         )
-    d_star = float(r2.x[n])
 
     # Stage 3: among equally fair splits, the best match for people and the most rotation.
-    mean_t = sum(targets.values()) / len(targets)
     tol = max(0.02 * mean_t, 1.0)
-    score = np.zeros(n + 1)
+    score = np.zeros(nv)
     for k, (m, c) in enumerate(pairs):
         s = pref_score(m, c)[0]
         if c.heaviness >= 2 and m.id in last_owner.get(c.id, ()):
             s -= rotation_penalty
         score[k] = s
-    bounds3 = Bounds(np.zeros(n + 1), np.r_[np.ones(n), d_star + tol])
-    r3 = milp(-score, constraints=cons2, integrality=integrality, bounds=bounds3)
-    x = (r3 if r3.success else r2).x
+    r3 = run(-score, np.array([fixed.get(i, 1e9) + tol for i in range(P)]))
+    x = (r3 if r3.success else sol).x[:n]
     deviation = finish(x, targets)
-    del m_index
     return PlanOut(
         assign,
         _shares(targets, sum(targets.values())),

@@ -329,6 +329,14 @@ class HomeScoreIn(BaseModel):
     score: int
 
 
+class HomeDecisionIn(BaseModel):
+    token: str
+    mode: str
+    deadline_seconds: int = 3600
+    need: dict | None = None
+    remote: list[str] | None = None
+
+
 class HomeSayIn(BaseModel):
     token: str
     utterance: str = Field(max_length=300)
@@ -377,6 +385,11 @@ def home_complete(body: HomeActionIn, s: Session = Depends(_session)):
 @app.post("/api/home/checkin")
 def home_checkin(body: HomeScoreIn, s: Session = Depends(_session)):
     return home.checkin_week(s, body.token, body.score)
+
+
+@app.post("/api/home/decision")
+def home_decision(body: HomeDecisionIn, s: Session = Depends(_session)):
+    return home.start_decision(s, body.token, body.mode, body.deadline_seconds, body.need, body.remote)
 
 
 @app.post("/api/home/say")

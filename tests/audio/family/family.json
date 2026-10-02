@@ -1,0 +1,35 @@
+{
+  "Maya": {
+    "voice": "Samantha",
+    "rate": 170,
+    "enrol_voice_dir": "samantha",
+    "says": [
+      "Just me, nobody is around.",
+      "Yes, I agree to answer.",
+      "I can do about twelve hours a week and six hundred dollars a month, but not nights.",
+      "Save it."
+    ]
+  },
+  "Ben": {
+    "voice": "Daniel",
+    "rate": 165,
+    "enrol_voice_dir": "daniel",
+    "says": [
+      "Just me, the house is quiet.",
+      "Yes, I agree to answer.",
+      "I live far away. I can give eight hours a week and five hundred dollars a month.",
+      "Save it."
+    ]
+  },
+  "Chen": {
+    "voice": "Rishi",
+    "rate": 160,
+    "enrol_voice_dir": "rishi",
+    "says": [
+      "Just me, I am alone.",
+      "Yes, I agree to answer.",
+      "I can do six hours a week and four hundred dollars a month, but I can't do transport.",
+      "Save it."
+    ]
+  }
+}

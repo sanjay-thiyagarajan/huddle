@@ -100,10 +100,11 @@ Optional extras: `pip install '.[voice]'` (speaker ID and Whisper), `pip install
 
 | Area | State |
 |---|---|
-| MCP server, privacy engine, three decision types in one household, check-in, revision, next round and fair-share record, care-load hints, plan history, plan card, audit trail | Built; 90 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
+| MCP server, privacy engine, three decision types in one household, check-in, revision, next round and fair-share record, care-load hints, plan history, plan card, audit trail | Built; 91 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
 | Simulator and private link flow | Built; 14 browser tests (demo flows, failure path, each feature, voice-only privacy, phone width, accessibility in light and dark, microphone path) |
 | Voice ID and Whisper | Built; measured on synthetic voices only |
 | Strands agent on Bedrock, AgentCore hosting | Code and notes written, **never run against AWS** |
+| Fictional-family simulation (synthetic voices: speaker ID, Whisper, voice-only dialogue, MCP, engine) | Passes end to end ([docs/family-simulation.md](docs/family-simulation.md)). **Tests the pipeline only; not evidence that Huddle helps real people** |
 | Real-group user test | **Not run** |
 
 Full plan: [docs/development-plan.md](docs/development-plan.md). Friction log: [docs/friction-log.md](docs/friction-log.md). Product feedback: [docs/product-feedback.md](docs/product-feedback.md).

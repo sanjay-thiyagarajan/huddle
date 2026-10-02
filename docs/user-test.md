@@ -1,6 +1,8 @@
 # Real-group test (plan P6)
 
 **STATUS: NOT RUN. This file holds the protocol and a blank results table. Nothing below is a result.**
+
+The fictional-family run in `docs/family-simulation.md` (synthetic voices, no humans) tests the software pipeline only. It is **not** a substitute for this test and must never be reported as user evidence.
 Fill the results in only with what real participants actually did and said. Report mediocre numbers
 as they are, and say how many groups ran. With 2-3 groups, nothing here is a statistical finding.
 

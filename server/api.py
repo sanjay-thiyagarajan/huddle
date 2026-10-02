@@ -1,12 +1,15 @@
 """REST API for the simulator and the private link flow, plus the MCP mount at /mcp."""
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from . import config
+from .agent import huddle_agent
 from .db import get_session, init_db
 from .engine import rounds
 from .mcp_server import mcp
@@ -93,6 +96,42 @@ def nudge(token: str, s: Session = Depends(_session)):
 @app.get("/api/server-holds")
 def holds(token: str, s: Session = Depends(_session)):
     return rounds.server_holds(s, token)
+
+
+class ToolIn(BaseModel):
+    name: str
+    arguments: dict = {}
+
+
+class ParseIn(BaseModel):
+    token: str
+    text: str = Field(max_length=1000)
+
+
+@app.post("/api/agent/tool")
+async def agent_tool(body: ToolIn):
+    """The simulator's agent calls Huddle's MCP server over HTTP (Streamable HTTP) here."""
+    if body.name not in huddle_agent.TOOLS:
+        raise rounds.HuddleError("bad_tool", f"Unknown tool {body.name}.")
+    return await huddle_agent.call_tool(body.name, body.arguments)
+
+
+@app.post("/api/agent/parse")
+def agent_parse(body: ParseIn, s: Session = Depends(_session)):
+    """Turn one person's words into a draft answer. Nothing is stored until they confirm."""
+    mode = rounds.status(s, body.token)["mode"]
+    return huddle_agent.parse_utterance(mode, body.text)
+
+
+# Built simulator (web/dist), when present. In dev, Vite serves it and proxies /api and /mcp here.
+_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+if (_DIST / "index.html").exists():
+    app.mount("/assets", StaticFiles(directory=_DIST / "assets"), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/r/{token}", include_in_schema=False)
+    def spa(token: str | None = None):
+        return FileResponse(_DIST / "index.html")
 
 
 # Streamable HTTP MCP endpoint at /mcp (mounted last so the routes above win).

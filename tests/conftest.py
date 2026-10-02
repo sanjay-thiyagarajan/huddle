@@ -1,3 +1,4 @@
+import os
 import socket
 import threading
 import time
@@ -38,6 +39,7 @@ def live_server():
         if server.started:
             break
         time.sleep(0.05)
+    os.environ["HUDDLE_MCP_URL"] = f"http://127.0.0.1:{port}/mcp"  # the agent proxy calls MCP over HTTP
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
     thread.join(timeout=5)

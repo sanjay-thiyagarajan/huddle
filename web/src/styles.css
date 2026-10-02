@@ -1,0 +1,79 @@
+:root {
+  --fog: #e9efec; --paper: #f7faf8; --ink: #17262b; --ink-soft: #4a5d63;
+  --lagoon: #1e6b73; --lagoon-ink: #ffffff; --dusk: #463d78; --dusk-tint: #e6e3f2;
+  --saffron: #f0b13f; --line: #c3d1cb; --warn: #8a3b12; --warn-tint: #fbe9dc;
+  --display: "Bricolage Grotesque", system-ui, sans-serif; --body: "Figtree", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fog: #0f1c20; --paper: #172a30; --ink: #e7f0ed; --ink-soft: #a6bcc2;
+    --lagoon: #5ec2cc; --lagoon-ink: #08181b; --dusk: #bcb3f0; --dusk-tint: #2a2650;
+    --line: #2f464d; --warn: #f4b48c; --warn-tint: #3a2417;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fog); color: var(--ink); font: 400 1.0625rem/1.55 var(--body); }
+h1, h2, h3, .big { font-family: var(--display); line-height: 1.15; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); font-weight: 700; }
+h2 { font-size: 1.9rem; } h3 { font-size: 1.15rem; margin-top: 1.5rem; }
+.big { font-size: 1.5rem; font-weight: 500; display: block; }
+p { margin: 0 0 .75rem; max-width: 62ch; }
+.lede { font-size: 1.25rem; } .fine { font-size: .9rem; color: var(--ink-soft); }
+:focus-visible { outline: 3px solid var(--dusk); outline-offset: 2px; }
+
+.shell { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; min-height: 100vh; }
+.device { background: var(--paper); border-right: 1px solid var(--line); padding: 2rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+.stage { padding: 2.5rem clamp(1rem, 4vw, 3.5rem); max-width: 54rem; }
+.intro { padding-top: 4rem; }
+@media (max-width: 800px) { .shell { grid-template-columns: 1fr; } .device { border-right: 0; border-bottom: 1px solid var(--line); } .intro { padding-top: 0; } }
+
+/* The one memorable element: the light ring. Moves only while the device is working. */
+.ring { width: 96px; height: 96px; border-radius: 50%; padding: 8px; background: conic-gradient(var(--line), var(--line)); }
+.ring span { display: block; width: 100%; height: 100%; border-radius: 50%; background: var(--paper); }
+.ring.on { background: conic-gradient(from 0deg, var(--saffron), var(--paper) 70%, var(--saffron)); animation: spin 3.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ring.on { animation: none; } }
+.sim-tag { font-size: .85rem; color: var(--ink-soft); }
+
+input, select, textarea { font: inherit; color: var(--ink); background: var(--paper); border: 1.5px solid var(--line); border-radius: 8px; padding: .55rem .7rem; width: 100%; }
+.device input, .device select { background: var(--fog); }
+label { display: block; font-weight: 500; } label input, label textarea { margin-top: .3rem; font-weight: 400; }
+fieldset { border: 0; padding: 0; margin: 0 0 1rem; } legend { font-weight: 600; padding: 0; margin-bottom: .4rem; }
+button, .ghost { font: inherit; cursor: pointer; border-radius: 8px; padding: .55rem 1rem; }
+.primary { background: var(--lagoon); color: var(--lagoon-ink); border: 0; font-weight: 600; padding: .75rem 1.25rem; }
+.primary:disabled { opacity: .45; cursor: not-allowed; }
+.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); text-decoration: none; display: inline-block; }
+.ghost:hover:not(:disabled) { border-color: var(--ink); } .ghost:disabled { opacity: .45; cursor: not-allowed; }
+.row, .modes { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .4rem; } .chips legend { width: 100%; }
+.chip { background: transparent; color: var(--ink); border: 1.5px solid var(--line); border-radius: 999px; padding: .35rem .85rem; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.consent { display: flex; gap: .6rem; align-items: flex-start; font-weight: 400; font-size: .95rem; }
+.consent input { width: 1.1rem; height: 1.1rem; margin-top: .25rem; flex: none; }
+.person-row { display: grid; grid-template-columns: 1fr 1.2fr; gap: .5rem; margin-bottom: .5rem; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; } @media (max-width: 560px) { .pair { grid-template-columns: 1fr; } }
+
+.roster, .holds { list-style: none; padding: 0; margin: 0 0 .75rem; }
+.roster li, .holds li { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 0; border-bottom: 1px solid var(--line); }
+.roster span, .holds span { color: var(--ink-soft); font-size: .9rem; }
+
+.booth { background: var(--dusk-tint); border-left: 6px solid var(--dusk); border-radius: 4px 12px 12px 4px; padding: 1.5rem; }
+.recognized { margin-bottom: 1.25rem; } .recognized > span:first-child { font-size: 1.15rem; display: block; margin-bottom: .25rem; }
+.recognized .fine { display: block; margin-bottom: .5rem; }
+.answer .say span { display: block; font-family: var(--display); font-size: 1.2rem; }
+.followup { color: var(--dusk); font-weight: 600; }
+.linkbox code { display: block; word-break: break-all; padding: .6rem; background: var(--paper); border-radius: 8px; margin: .5rem 0 .75rem; font-size: .85rem; }
+
+.banner { padding: .7rem 1rem; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); font-size: .95rem; max-width: 62ch; }
+.banner.warn { background: var(--warn-tint); color: var(--warn); border-color: var(--warn); font-weight: 600; }
+.banner.note { border-left: 5px solid var(--lagoon); } .banner.limits { margin-top: 1.5rem; }
+.error { color: var(--warn); font-weight: 600; }
+
+.reveal .plan { font-family: var(--display); font-size: 2rem; line-height: 1.2; } .reveal .plan span { font-size: 1.1rem; color: var(--ink-soft); }
+.reveal .lead { font-size: 1.2rem; }
+.split { border-top: 1px solid var(--line); }
+.who { display: grid; grid-template-columns: 8rem 1fr; padding: .8rem 0; border-bottom: 1px solid var(--line); }
+.who ul, .options { margin: 0; padding-left: 1.1rem; } .who.open strong { color: var(--warn); }
+.options li { margin-bottom: .4rem; max-width: 62ch; }
+.solo { max-width: 40rem; margin: 0 auto; padding: 2rem 1rem 4rem; } .solo h1 { font-size: 2rem; }
+@media (max-width: 560px) { .who { grid-template-columns: 1fr; } }

@@ -21,7 +21,8 @@ BUCKETS = {n: [privacy.money_bucket(EVERYDAY[n]), privacy.hours_bucket(CARE_HOUR
 
 # Routes/tools exercised below; the meta-test fails if a new one is added without coverage.
 COVERED_ROUTES = {"/api/health", "/api/rounds", "/api/status", "/api/answers", "/me/answers",
-                  "/api/result", "/api/close", "/api/nudge", "/api/server-holds"}
+                  "/api/result", "/api/close", "/api/nudge", "/api/server-holds",
+                  "/api/agent/tool", "/api/agent/parse"}
 COVERED_TOOLS = {"start_huddle", "submit_private_answer", "get_group_result", "close_round",
                  "nudge_pending"}
 
@@ -121,3 +122,24 @@ async def test_leak_mcp_every_tool_every_participant(live_server):
                 out = await call("get_group_result", {"token": tok}, viewer, "closed")
                 assert out.structuredContent["ready"] is True
                 await call("close_round", {"token": tok}, viewer, "closed")
+
+
+async def test_leak_agent_routes(live_server):
+    """The simulator agent's MCP proxy and parser, as every participant, against a real server."""
+    async with httpx.AsyncClient(base_url=live_server, timeout=20) as c:
+        r = (await c.post("/api/agent/tool", json={"name": "start_huddle", "arguments": {
+            "mode": "care", "participants": [{"name": n} for n in EVERYDAY]}})).json()
+        toks = {p["name"]: p["token"] for p in r["participants"]}
+        for name, tok in toks.items():
+            text = f"I can do {CARE_HOURS[name]} hours and ${CARE_DOLLARS[name]} a month, not nights"
+            parsed = await c.post("/api/agent/parse", json={"token": tok, "text": text})
+            _check("parse", parsed.text, name)
+            sub = await c.post("/api/agent/tool", json={"name": "submit_private_answer", "arguments": {
+                "token": tok, "answer": _care_answer(name)}})
+            _check("agent submit", sub.text, name)
+        for viewer, tok in toks.items():
+            for tool in ("get_group_result", "nudge_pending", "close_round"):
+                resp = await c.post("/api/agent/tool", json={"name": tool, "arguments": {"token": tok}})
+                _check(f"agent {tool}", resp.text, viewer)
+        bad = await c.post("/api/agent/tool", json={"name": "dump_db", "arguments": {}})
+        assert bad.status_code == 400

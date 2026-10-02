@@ -37,3 +37,12 @@ Format per entry: task attempted, steps taken, expected vs actual, severity, wor
 - **Severity:** Low.
 - **Workaround:** None needed; noted so CI timing is not misread.
 - **Suggestion:** None for the library; recording for honesty about the dev loop.
+
+## F-005: Browser automation unavailable for UI verification
+- **Task attempted:** Visually check the simulator UI in Chrome via the Claude in Chrome tools.
+- **Steps taken:** Called `tabs_context_mcp` with `createIfEmpty`.
+- **Expected:** A tab group to drive the app at localhost.
+- **Actual:** "Browser extension is not connected."
+- **Severity:** Medium (UI was verified only by `tsc`, `vite build` and a scripted API round; no visual or interaction check yet).
+- **Workaround:** Scripted end-to-end round in `tests/e2e_mock_demo.py`; Playwright E2E is planned for P7.
+- **Suggestion:** Have the tool report which of "not installed", "not logged in" or "needs restart" applies.

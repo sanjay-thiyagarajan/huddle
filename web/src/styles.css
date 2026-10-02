@@ -79,3 +79,10 @@ button, .ghost { font: inherit; cursor: pointer; border-radius: 8px; padding: .5
 @media (max-width: 560px) { .who { grid-template-columns: 1fr; } }
 .voicebox { margin: .75rem 0; } .voicebox summary { cursor: pointer; font-weight: 600; margin-bottom: .5rem; }
 .recognized > .ghost { margin-bottom: .75rem; }
+.checkin { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.explain { margin: 1rem 0; }
+.audit { list-style: none; padding: 0; margin: 0 0 .75rem; font-size: .85rem; color: var(--ink-soft); }
+.audit li { padding: .15rem 0; }
+.need-editor { margin-bottom: 1rem; } .need-editor summary { cursor: pointer; font-weight: 600; margin-bottom: .5rem; }
+.task-row { display: grid; grid-template-columns: 1.4fr 1.2fr .6fr; gap: .4rem; margin-bottom: .4rem; }
+a:not(.ghost) { color: var(--lagoon); text-underline-offset: 3px; }

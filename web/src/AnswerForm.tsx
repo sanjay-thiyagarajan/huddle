@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, CARE_DEALBREAKERS, EVERYDAY_ATTRS, EVERYDAY_VIBES, listen, speechSupported } from "./api";
+import { api, CARE_DEALBREAKERS, EVERYDAY_ATTRS, EVERYDAY_VIBES, listen, speechSupported, TRIP_ATTRS, TRIP_VIBES } from "./api";
 import type { Mode } from "./api";
 
 type Draft = Record<string, unknown>;
@@ -33,12 +33,13 @@ export default function AnswerForm({ mode, token, name, onSubmit }: {
   const [said, setSaid] = useState("");
   const [consent, setConsent] = useState(false);
   const [followup, setFollowup] = useState<string | null>(null);
+  const [engine, setEngine] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const stop = useRef<(() => void) | null>(null);
 
-  useEffect(() => { setDraft(blank(mode)); setSaid(""); setConsent(false); setFollowup(null); setError(null); }, [token, mode]);
+  useEffect(() => { setDraft(blank(mode)); setSaid(""); setConsent(false); setFollowup(null); setEngine(null); setError(null); }, [token, mode]);
 
   const set = (k: string, v: unknown) => setDraft((d) => ({ ...d, [k]: v }));
   const list = (k: string) => (draft[k] as string[]) ?? [];
@@ -53,6 +54,7 @@ export default function AnswerForm({ mode, token, name, onSubmit }: {
         return next;
       });
       setFollowup(out.followup);
+      setEngine(out.engine);
     } catch (e) { setError((e as Error).message); }
   }
 
@@ -76,6 +78,7 @@ export default function AnswerForm({ mode, token, name, onSubmit }: {
         <span>Say it in your own words, {name}</span>
         <textarea rows={2} value={said} onChange={(e) => setSaid(e.target.value)}
           placeholder={mode === "care" ? "I can do maybe ten hours a week and $400 a month, but not nights."
+                                       : mode === "trip" ? "Up to $400 for the trip, I love the beach, and no flights."
                                        : "Under $60 each, I'd love good food, and no crowds."} />
       </label>
       <div className="row">
@@ -84,6 +87,7 @@ export default function AnswerForm({ mode, token, name, onSubmit }: {
           <button type="button" className="ghost" aria-pressed={listening} onClick={mic}>{listening ? "Stop listening" : "Use microphone"}</button>
         )}
       </div>
+      {engine && <p className="fine" role="status">Understood by: {engine === "bedrock" ? "Amazon Bedrock" : engine === "mock-fallback" ? "built-in parser (Bedrock was unavailable)" : "built-in parser"}. Check the fields below.</p>}
       {followup && <p className="followup" role="status">{followup}</p>}
 
       {mode === "care" ? (
@@ -102,12 +106,12 @@ export default function AnswerForm({ mode, token, name, onSubmit }: {
         </>
       ) : (
         <>
-          <label>Most you'd spend per person (dollars)
+          <label>{mode === "trip" ? "Most you'd spend per person for the whole trip (dollars)" : "Most you'd spend per person (dollars)"}
             <input type="number" min={0} step={1} inputMode="numeric" required
               value={String(draft.budget_ceiling ?? "")} onChange={(e) => set("budget_ceiling", e.target.value)} />
           </label>
-          <Chips label="What you'd enjoy" options={EVERYDAY_VIBES} value={list("vibe")} onChange={(v) => set("vibe", v)} />
-          <Chips label="Dealbreakers" options={EVERYDAY_ATTRS} value={list("dealbreakers")} onChange={(v) => set("dealbreakers", v)} />
+          <Chips label="What you'd enjoy" options={mode === "trip" ? TRIP_VIBES : EVERYDAY_VIBES} value={list("vibe")} onChange={(v) => set("vibe", v)} />
+          <Chips label="Dealbreakers" options={mode === "trip" ? TRIP_ATTRS : EVERYDAY_ATTRS} value={list("dealbreakers")} onChange={(v) => set("dealbreakers", v)} />
         </>
       )}
 

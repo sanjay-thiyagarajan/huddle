@@ -1,11 +1,16 @@
-import type { Result } from "../api";
+import { useState } from "react";
+import type { Explanation, Result } from "../api";
 
 /** Group result: aggregate only. Never shows anyone's answer or who set a limit. */
-export default function Reveal({ result }: { result: Result }) {
+export default function Reveal({ result, onExplain }: { result: Result; onExplain?: () => Promise<Explanation> }) {
   const care = result.mode === "care";
+  const [explained, setExplained] = useState<Explanation | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const heading = care ? "Here's a care plan that fits everyone"
+    : result.mode === "trip" ? "Here's a trip that works for the group" : "Here's the plan";
   return (
     <section className="reveal" aria-labelledby="reveal-h">
-      <h2 id="reveal-h">{care ? "Here's a care plan that fits everyone" : "Here's the plan"}</h2>
+      <h2 id="reveal-h">{heading}</h2>
 
       {(result.warnings as string[]).map((w) => <p key={w} className="banner warn">{w}</p>)}
       {result.defaults_applied && (
@@ -15,6 +20,18 @@ export default function Reveal({ result }: { result: Result }) {
       )}
 
       {care ? <Care r={result} /> : <Everyday r={result} />}
+
+      {onExplain && (
+        <div className="explain">
+          <button className="ghost" onClick={() => { setError(null); onExplain().then(setExplained).catch((e: Error) => setError(e.message)); }}>
+            Explain this in plain words
+          </button>
+          {explained && (
+            <p role="status">{explained.text} <span className="fine">({explained.engine === "bedrock" ? "Amazon Bedrock" : "built-in explainer"}, {explained.latency_ms} ms)</span></p>
+          )}
+          {error && <p className="error" role="alert">{error}</p>}
+        </div>
+      )}
 
       <p className="banner limits">{result.honest_limits}</p>
       {care && <p className="fine">{result.disclaimer}</p>}

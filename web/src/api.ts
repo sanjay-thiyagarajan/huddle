@@ -1,16 +1,26 @@
-export type Mode = "everyday" | "care";
+export type Mode = "everyday" | "care" | "trip";
 export type Channel = "voice" | "link";
 
 export interface Person { name: string; channel: Channel; is_host: boolean; token: string; link: string }
+export interface AuditEvent { at: string; kind: string; actor: string | null; detail: string | null }
+export interface CheckinSummary {
+  checked_in: number; of: number; complete: boolean; revisit?: boolean; message?: string;
+  comfortable_count?: number; warning?: string;
+}
 export interface Status {
   round_id: string; mode: Mode; state: "collecting" | "reminded" | "closed";
   deadline_at: string; reminder_at: string;
   need: { tasks?: { id: string; label: string; hours: number }[]; dollars_per_month?: number };
   me: { name: string; is_host: boolean; answered: boolean };
   participants: { name: string; channel: Channel; answered: boolean }[];
+  events: AuditEvent[];
 }
 export interface Holds { stored: { name: string; has_answer: boolean; value: string }[] }
-export interface Draft { draft: Record<string, unknown>; missing: string[]; followup: string | null }
+export interface Draft {
+  draft: Record<string, unknown>; missing: string[]; followup: string | null;
+  engine: string; latency_ms: number; engine_error?: string;
+}
+export interface Explanation { text: string; engine: string; latency_ms: number }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Result = Record<string, any>;
 
@@ -35,7 +45,11 @@ export const api = {
   submit: (token: string, answer: Record<string, unknown>) =>
     post("/api/answers", { token, answer }).then((r) => parse<{ stored: boolean; warnings: string[] }>(r)),
   result: (token: string) =>
-    fetch(`/api/result?token=${encodeURIComponent(token)}`).then((r) => parse<{ ready: boolean; result?: Result }>(r)),
+    fetch(`/api/result?token=${encodeURIComponent(token)}`)
+      .then((r) => parse<{ ready: boolean; result?: Result; checkin?: CheckinSummary }>(r)),
+  explain: (token: string) => fetch(`/api/agent/explain?token=${encodeURIComponent(token)}`).then((r) => parse<Explanation>(r)),
+  checkin: (token: string, score: number) =>
+    post("/api/checkin", { token, score }).then((r) => parse<{ stored: boolean; summary: CheckinSummary }>(r)),
   parse: (token: string, text: string) => post("/api/agent/parse", { token, text }).then((r) => parse<Draft>(r)),
 };
 
@@ -67,4 +81,17 @@ export const EVERYDAY_VIBES: [string, string][] = [
 export const CARE_DEALBREAKERS: [string, string][] = [
   ["nights", "Overnight cover"], ["transport", "Driving and transport"], ["appointments", "Appointments"],
   ["finances", "Finances and paperwork"], ["checkins", "Daily check-ins"], ["far_away", "I live far away"],
+];
+
+export const TRIP_ATTRS: [string, string][] = [
+  ["flights", "Flying"], ["camping", "Camping"], ["long_drive", "Long drive"],
+  ["early_start", "Early start"], ["strenuous", "Strenuous activity"], ["nightlife", "Nightlife"],
+];
+export const TRIP_VIBES: [string, string][] = [
+  ["beach", "Beach"], ["city", "City"], ["nature", "Nature"],
+  ["foodie", "Food-focused"], ["relaxed", "Relaxed"], ["adventurous", "Adventurous"],
+];
+export const TASK_TYPES: [string, string][] = [
+  ["checkin", "Check-in"], ["appointments", "Appointments and transport"], ["meals", "Meals"],
+  ["finances", "Finances and paperwork"], ["overnight", "Overnight cover"],
 ];

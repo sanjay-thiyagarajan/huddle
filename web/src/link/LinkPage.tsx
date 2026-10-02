@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import AnswerForm from "../AnswerForm";
+import Checkin from "../Checkin";
 import { api } from "../api";
-import type { Result, Status } from "../api";
+import type { CheckinSummary, Result, Status } from "../api";
 import Reveal from "../reveal/Reveal";
 
 /** /r/<token>: a private page for one person, usable from any phone. */
 export default function LinkPage({ token }: { token: string }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [checkin, setCheckin] = useState<CheckinSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -16,7 +18,7 @@ export default function LinkPage({ token }: { token: string }) {
       setStatus(s);
       if (s.state === "closed") {
         const r = await api.result(token);
-        if (r.ready && r.result) setResult(r.result);
+        if (r.ready && r.result) { setResult(r.result); setCheckin(r.checkin ?? null); }
       }
     } catch (e) { setError((e as Error).message); }
   }, [token]);
@@ -41,7 +43,13 @@ export default function LinkPage({ token }: { token: string }) {
       {care && status.need.tasks && (
         <p className="fine">The plan needs {status.need.tasks.reduce((n, t) => n + t.hours, 0)} h/week and ${status.need.dollars_per_month?.toLocaleString()}/month. Decision aid, not medical, legal or financial advice.</p>
       )}
-      {result ? <Reveal result={result} />
+      {result ? (
+        <>
+          <Reveal result={result} onExplain={() => api.explain(token)} />
+          <Checkin name={status.me.name} summary={checkin} done={status.events.some((e) => e.kind === "checked_in" && e.actor === status.me.name)}
+            onSubmit={async (score) => { await api.checkin(token, score); await refresh(); }} />
+        </>
+      )
         : status.me.answered ? <p className="banner note" role="status">Saved. Waiting for the others. This page updates by itself.</p>
         : status.state === "closed" ? <p className="banner note">This round has closed.</p>
         : <AnswerForm mode={status.mode} token={token} name={status.me.name}

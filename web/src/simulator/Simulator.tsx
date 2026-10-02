@@ -1,29 +1,53 @@
 import { useCallback, useEffect, useState } from "react";
 import AnswerForm from "../AnswerForm";
-import { api, listen, speechSupported, tool } from "../api";
-import type { Channel, Holds, Mode, Person, Result, Status } from "../api";
+import Checkin from "../Checkin";
+import { api, listen, speechSupported, TASK_TYPES, tool } from "../api";
+import type { Channel, CheckinSummary, Holds, Mode, Person, Result, Status } from "../api";
 import Reveal from "../reveal/Reveal";
 import { ENROL_PHRASES, enrolVoice, identifyVoice, recordWav } from "../voice";
 
 const PRESETS: Record<Mode, { name: string; channel: Channel }[]> = {
   everyday: [{ name: "Maya", channel: "voice" }, { name: "Ben", channel: "voice" }],
   care: [{ name: "Maya", channel: "voice" }, { name: "Ben", channel: "voice" }, { name: "Chen", channel: "link" }],
+  trip: [{ name: "Maya", channel: "voice" }, { name: "Ben", channel: "voice" }, { name: "Chen", channel: "link" }],
 };
-const guessMode = (t: string): Mode => (/\b(care|mum|mom|dad|parent|mother|father|grand)/i.test(t) ? "care" : "everyday");
+const WAKE: Record<Mode, string> = {
+  everyday: "Alexa, plan our Saturday",
+  care: "Alexa, help us plan Mum's care",
+  trip: "Alexa, help us pick a trip",
+};
+const MODE_LABEL: Record<Mode, string> = {
+  everyday: "A weekend plan", care: "Sharing care for a parent", trip: "A trip with friends",
+};
+const guessMode = (t: string): Mode =>
+  /\b(care|mum|mom|dad|parent|mother|father|grand)/i.test(t) ? "care"
+    : /\b(trip|travel|vacation|getaway|holiday)\b/i.test(t) ? "trip" : "everyday";
+
+interface TaskDraft { label: string; type: string; hours: number }
+const DEFAULT_TASKS: TaskDraft[] = [
+  { label: "Daily check-in", type: "checkin", hours: 7 },
+  { label: "Appointments and transport", type: "appointments", hours: 6 },
+  { label: "Meals", type: "meals", hours: 8 },
+  { label: "Finances and paperwork", type: "finances", hours: 3 },
+  { label: "Overnight cover", type: "overnight", hours: 6 },
+];
 
 function Ring({ active, label }: { active: boolean; label: string }) {
   return <div className={`ring${active ? " on" : ""}`} role="img" aria-label={label}><span /></div>;
 }
 
 export default function Simulator() {
-  const [utterance, setUtterance] = useState("Alexa, plan our Saturday");
+  const [utterance, setUtterance] = useState(WAKE.everyday);
   const [mode, setMode] = useState<Mode>("everyday");
   const [people, setPeople] = useState(PRESETS.everyday);
+  const [tasks, setTasks] = useState<TaskDraft[]>(DEFAULT_TASKS);
+  const [dollars, setDollars] = useState(1800);
   const [demoClock, setDemoClock] = useState(false);
   const [round, setRound] = useState<Person[] | null>(null);
   const [active, setActive] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [checkin, setCheckin] = useState<CheckinSummary | null>(null);
   const [holds, setHolds] = useState<Holds | null>(null);
   const [showHolds, setShowHolds] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -33,20 +57,24 @@ export default function Simulator() {
 
   const host = round?.find((p) => p.is_host);
 
+  const chooseMode = (m: Mode) => { setMode(m); setPeople(PRESETS[m]); setUtterance(WAKE[m]); };
   const changeUtterance = (t: string) => {
     setUtterance(t);
     const m = guessMode(t);
     if (m !== mode) { setMode(m); setPeople(PRESETS[m]); }
   };
-  const chooseMode = (m: Mode) => { setMode(m); setPeople(PRESETS[m]); setUtterance(m === "care" ? "Alexa, help us plan Mum's care" : "Alexa, plan our Saturday"); };
 
   async function start() {
     setError(null);
     try {
+      const need = mode === "care" ? {
+        tasks: tasks.map((t, i) => ({ id: `t${i}_${t.type}`, label: t.label, type: t.type, hours: Number(t.hours) })),
+        dollars_per_month: Number(dollars),
+      } : undefined;
       const out = await tool<{ participants: Person[] }>("start_huddle", {
-        mode, participants: people.filter((p) => p.name.trim()), deadline_seconds: demoClock ? 45 : 3600,
+        mode, participants: people.filter((p) => p.name.trim()), deadline_seconds: demoClock ? 45 : 3600, need,
       });
-      setRound(out.participants); setActive(out.participants[0].name); setResult(null); setNote(null);
+      setRound(out.participants); setActive(out.participants[0].name); setResult(null); setCheckin(null); setNote(null);
     } catch (e) { setError((e as Error).message); }
   }
 
@@ -56,12 +84,12 @@ export default function Simulator() {
       const s = await api.status(host.token);
       setStatus(s);
       if (showHolds) setHolds(await api.holds(host.token));
-      if (s.state === "closed" && !result) {
-        const r = await tool<{ ready: boolean; result?: Result }>("get_group_result", { token: host.token });
-        if (r.ready && r.result) setResult(r.result);
+      if (s.state === "closed") {
+        const r = await tool<{ ready: boolean; result?: Result; checkin?: CheckinSummary }>("get_group_result", { token: host.token });
+        if (r.ready && r.result) { setResult(r.result); setCheckin(r.checkin ?? null); }
       }
     } catch (e) { setError((e as Error).message); }
-  }, [host, showHolds, result]);
+  }, [host, showHolds]);
 
   useEffect(() => {
     if (!round) return;
@@ -100,11 +128,13 @@ export default function Simulator() {
       } else setVoiceMsg("Not sure who that was. Pick a profile below.");
     } catch (e) { setVoiceMsg((e as Error).message); }
   }
-  function reset() { setRound(null); setStatus(null); setResult(null); setHolds(null); setNote(null); }
+  function reset() { setRound(null); setStatus(null); setResult(null); setCheckin(null); setHolds(null); setNote(null); }
 
   const person = round?.find((p) => p.name === active);
   const answered = (n: string) => status?.participants.find((p) => p.name === n)?.answered ?? false;
+  const checkedIn = (n: string) => status?.events.some((e) => e.kind === "checked_in" && e.actor === n) ?? false;
   const state = status?.state;
+  const setTask = (i: number, patch: Partial<TaskDraft>) => setTasks(tasks.map((t, j) => (j === i ? { ...t, ...patch } : t)));
 
   return (
     <div className="shell">
@@ -124,12 +154,36 @@ export default function Simulator() {
               </button>
             )}
             <div className="modes" role="group" aria-label="Kind of decision">
-              {(["everyday", "care"] as Mode[]).map((m) => (
+              {(["everyday", "care", "trip"] as Mode[]).map((m) => (
                 <button type="button" key={m} className="chip" aria-pressed={mode === m} onClick={() => chooseMode(m)}>
-                  {m === "everyday" ? "A weekend plan" : "Sharing care for a parent"}
+                  {MODE_LABEL[m]}
                 </button>
               ))}
             </div>
+            {mode === "care" && (
+              <details className="need-editor">
+                <summary>What the care plan needs ({tasks.reduce((n, t) => n + Number(t.hours || 0), 0)} h/week, ${dollars}/month)</summary>
+                <p className="fine">Everyone can see this part. Only the amounts people can give stay private.</p>
+                {tasks.map((t, i) => (
+                  <div className="task-row" key={i}>
+                    <input aria-label={`Task ${i + 1} name`} value={t.label} onChange={(e) => setTask(i, { label: e.target.value })} />
+                    <select aria-label={`Task ${i + 1} type`} value={t.type} onChange={(e) => setTask(i, { type: e.target.value })}>
+                      {TASK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                    </select>
+                    <input aria-label={`Task ${i + 1} hours per week`} type="number" min={1} max={80} value={t.hours}
+                      onChange={(e) => setTask(i, { hours: Number(e.target.value) })} />
+                  </div>
+                ))}
+                <div className="row">
+                  {tasks.length < 20 && <button type="button" className="ghost" onClick={() => setTasks([...tasks, { label: "New task", type: "checkin", hours: 1 }])}>Add a task</button>}
+                  {tasks.length > 1 && <button type="button" className="ghost" onClick={() => setTasks(tasks.slice(0, -1))}>Remove last</button>}
+                </div>
+                <label>Money needed per month (dollars)
+                  <input type="number" min={0} value={dollars} onChange={(e) => setDollars(Number(e.target.value))} />
+                </label>
+                <p className="fine">Decision aid, not medical, legal or financial advice. Don't enter health details.</p>
+              </details>
+            )}
             <fieldset className="people">
               <legend>Who's in the huddle</legend>
               {people.map((p, i) => (
@@ -178,6 +232,15 @@ export default function Simulator() {
               </ul>
             )}
             <details className="voicebox">
+              <summary>What happened so far</summary>
+              <p className="fine">Who did what and when. Never what anyone answered.</p>
+              <ul className="audit" aria-label="Audit trail">
+                {status?.events.map((e, i) => (
+                  <li key={i}>{new Date(e.at + "Z").toLocaleTimeString()} {e.kind.replace("_", " ")}{e.actor ? `, ${e.actor}` : ""}{e.detail ? ` (${e.detail})` : ""}</li>
+                ))}
+              </ul>
+            </details>
+            <details className="voicebox">
               <summary>Voice recognition setup</summary>
               <p className="fine">Optional stand-in for Alexa person recognition. It separates profiles and is not security. Only a voice fingerprint is kept, not the recording.</p>
               <div className="row">
@@ -196,12 +259,30 @@ export default function Simulator() {
         {!round && (
           <section className="intro">
             <h1>Huddle</h1>
-            <p className="lede">Ask everyone privately. Get one plan. Nobody has to say their number out loud.</p>
-            <p className="fine">Answers are never shown or attributed. This is bucketing, not cryptographic secrecy, and with only two people the other person can work out your number.</p>
+            <p className="lede">Some group decisions stall because nobody wants to say their real number out loud. Huddle asks each person privately and proposes one plan.</p>
+            <p>Say three siblings are sharing a parent's care. One can give 12 hours a week but not nights. One lives far away and can send money. One can only drive on weekdays. Nobody wants to be the person whose limit decides the plan. Huddle collects each limit privately, works out what fits everyone, and shows the group a plan and the trade-off, without saying who set which limit.</p>
+            <p className="fine">Answers are never shown or attributed. This is bucketing, not cryptographic secrecy, and with only two people the other person can work out your number. Huddle decides; it does not book, split expenses or give medical, legal or financial advice.</p>
           </section>
         )}
 
-        {round && result && <Reveal result={result} />}
+        {round && result && (
+          <>
+            <Reveal result={result} onExplain={host ? () => api.explain(host.token) : undefined} />
+            <div className="recognized" role="group" aria-label="Who is checking in">
+              <div className="modes">
+                {round.map((p) => (
+                  <button key={p.name} className="chip" aria-pressed={p.name === active} onClick={() => setActive(p.name)}>{p.name}</button>
+                ))}
+              </div>
+            </div>
+            {person && (person.channel === "link" && !checkedIn(person.name) ? (
+              <p className="fine">{person.name} checks in on their own page: <a href={person.link} target="_blank" rel="noreferrer">open it</a>.</p>
+            ) : (
+              <Checkin name={person?.name ?? ""} summary={checkin} done={person ? checkedIn(person.name) : false}
+                onSubmit={async (score) => { await tool("submit_checkin", { token: person!.token, score }); void refresh(); }} />
+            ))}
+          </>
+        )}
 
         {round && !result && (
           <section className="booth" aria-label="Private answer">

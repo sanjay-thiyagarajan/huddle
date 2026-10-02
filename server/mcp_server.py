@@ -36,8 +36,9 @@ def _run(fn, *args, **kwargs) -> dict[str, Any]:
 @mcp.tool()
 def start_huddle(mode: str, participants: list[dict], deadline_seconds: int = 3600,
                  need: dict | None = None) -> dict[str, Any]:
-    """Open a round. mode: 'everyday' or 'care'. participants: [{name, channel: voice|link}];
-    the first is the host. Returns a private token (and link) per participant."""
+    """Open a round. mode: 'care', 'everyday' or 'trip'. participants: [{name, channel: voice|link,
+    email (optional, for reminders; only add it if they agreed)}]; the first is the host. Returns a
+    private token (and link) per participant. Emails are never returned."""
     return _run(rounds.create_round, mode, participants, deadline_seconds, need)
 
 
@@ -62,7 +63,8 @@ def close_round(token: str) -> dict[str, Any]:
 
 @mcp.tool()
 def nudge_pending(token: str) -> dict[str, Any]:
-    """Host only: names of people who have not answered yet (never their values)."""
+    """Host only: remind everyone who hasn't answered, now. Delivery is reported per person and channel
+    (in-app always; email only if configured and given). Nobody is nudged twice within 10 minutes."""
     return _run(rounds.nudge_pending, token)
 
 

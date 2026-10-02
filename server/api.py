@@ -1,4 +1,6 @@
 """REST API for the simulator and the private link flow, plus the MCP mount at /mcp."""
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -22,11 +24,34 @@ def _session():
         yield s
 
 
+log = logging.getLogger("huddle.scheduler")
+
+
+def _run_tick() -> int:
+    with get_session() as s:
+        return len(rounds.tick(s))
+
+
+async def _scheduler():
+    """Real reminders: every few seconds, send due reminders and close rounds that passed their deadline,
+    whether or not anyone has a page open."""
+    while True:
+        await asyncio.sleep(config.TICK_SECONDS)
+        try:
+            await run_in_threadpool(_run_tick)
+        except Exception:  # noqa: BLE001  a bad tick must never stop the scheduler
+            log.exception("reminder tick failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    async with mcp.session_manager.run():
-        yield
+    task = asyncio.create_task(_scheduler())
+    try:
+        async with mcp.session_manager.run():
+            yield
+    finally:
+        task.cancel()
 
 
 app = FastAPI(title="Huddle", lifespan=lifespan)

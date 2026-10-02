@@ -12,8 +12,18 @@ from datetime import UTC, datetime, timedelta
 from pydantic import ValidationError
 from sqlmodel import Session, select
 
-from .. import config
-from ..db import Answer, Checkin, Event, HouseholdLoad, Participant, PersonalShare, Round, RoundHousehold
+from .. import config, notify
+from ..db import (
+    Answer,
+    Checkin,
+    Contact,
+    Event,
+    HouseholdLoad,
+    Participant,
+    PersonalShare,
+    Round,
+    RoundHousehold,
+)
 from . import card, care, everyday, privacy, trip
 
 MODES = {"everyday": everyday, "care": care, "trip": trip}
@@ -99,6 +109,9 @@ def create_round(s: Session, mode: str, participants: list[dict], deadline_secon
     for p in participants:
         if p.get("channel", "voice") not in CHANNELS:
             raise HuddleError("bad_participants", f"channel must be one of {CHANNELS}.")
+        email = p.get("email")
+        if email and not notify.EMAIL_RE.match(str(email).strip()):
+            raise HuddleError("bad_participants", "That email address doesn't look right.")
     if not 10 <= deadline_seconds <= 14 * 86400:
         raise HuddleError("bad_deadline", "deadline_seconds must be between 10 and 14 days.")
     try:
@@ -115,6 +128,8 @@ def create_round(s: Session, mode: str, participants: list[dict], deadline_secon
         part = Participant(id=secrets.token_hex(4), round_id=rnd.id, name=name,
                            channel=p.get("channel", "voice"), is_host=(i == 0))
         s.add(part)
+        if p.get("email"):
+            s.add(Contact(participant_id=part.id, email=str(p["email"]).strip()))
         token = make_token(part.id, deadline + timedelta(days=1))
         out.append({"name": name, "channel": part.channel, "is_host": part.is_host,
                     "token": token, "link": f"/r/{token}"})
@@ -240,6 +255,17 @@ def my_answers(s: Session, token: str, now: datetime | None = None) -> dict:
             "answer": a.data if a and not a.is_default else None}
 
 
+def _my_reminder(s: Session, rnd: Round, p: Participant, answers: dict) -> dict | None:
+    """The latest reminder sent to ME while I still owe an answer (drives the banner on my own page)."""
+    if p.id in answers and not answers[p.id].is_default:
+        return None
+    mine = [e for e in _reminder_events(s, rnd.id) if e.actor == p.name]
+    if not mine:
+        return None
+    last = max(mine, key=lambda e: e.id)
+    return {"at": last.at.isoformat(), "kind": (last.detail or "").split(":")[0]}
+
+
 def status(s: Session, token: str, now: datetime | None = None) -> dict:
     now = now or now_utc()
     p, rnd = _auth(s, token, now)
@@ -252,6 +278,7 @@ def status(s: Session, token: str, now: datetime | None = None) -> dict:
         "need": rnd.need,
         "me": {"name": p.name, "is_host": p.is_host, "answered": p.id in answers},
         "hints": _hints(s, rnd, p),
+        "reminder": _my_reminder(s, rnd, p, answers),
         "participants": [{"name": q.name, "channel": q.channel, "answered": q.id in answers
                           and not answers[q.id].is_default} for q in parts],
         "options": getattr(_mode(rnd.mode), "OPTIONS", None),
@@ -260,18 +287,76 @@ def status(s: Session, token: str, now: datetime | None = None) -> dict:
     }
 
 
-def nudge_pending(s: Session, token: str, now: datetime | None = None) -> dict:
-    """Host-only: who has not answered yet (names only, never values)."""
+MANUAL_REMINDER_GAP = timedelta(minutes=10)
+
+
+def _pending(s: Session, rnd: Round) -> list[Participant]:
+    answers = _answers(s, rnd.id)
+    return [q for q in _participants(s, rnd.id) if q.id not in answers or answers[q.id].is_default]
+
+
+def _reminder_events(s: Session, round_id: str) -> list[Event]:
+    return list(s.exec(select(Event).where(Event.round_id == round_id, Event.kind == "reminder_sent")))
+
+
+def _send_reminder(s: Session, rnd: Round, p: Participant, kind: str, now: datetime, deliver) -> list:
+    """Deliver one reminder to one person and record it (names and channels only, never content)."""
+    contact = s.get(Contact, p.id)
+    token = make_token(p.id, rnd.deadline_at + timedelta(days=1))
+    deliveries = deliver(name=p.name, email=contact.email if contact else None, mode=rnd.mode,
+                         link=f"{config.PUBLIC_URL}/r/{token}", kind=kind)
+    summary = ", ".join(f"{d.channel} {d.status}" for d in deliveries)
+    _log(s, rnd.id, "reminder_sent", now, actor=p.name, detail=f"{kind}: {summary}")
+    s.commit()
+    return deliveries
+
+
+def tick(s: Session, now: datetime | None = None, deliver=notify.deliver) -> list[tuple[str, str, str]]:
+    """Run by the background scheduler. For every open round: move it along the clock (including
+    closing at the deadline with defaults) and send each pending person their first and final reminder
+    once. Returns [(round_id, person, kind)] for what was sent."""
+    now = now or now_utc()
+    sent = []
+    for rnd in list(s.exec(select(Round).where(Round.state != "closed"))):
+        rnd = advance(s, rnd, now)
+        if rnd.state == "closed":
+            continue
+        total = rnd.deadline_at - rnd.created_at
+        final_at = rnd.deadline_at - min(timedelta(minutes=10), total * 0.1)
+        already = {(e.actor, (e.detail or "").split(":")[0]) for e in _reminder_events(s, rnd.id)}
+        for p in _pending(s, rnd):
+            for kind, due in (("first", rnd.reminder_at), ("final", final_at)):
+                if now >= due and (p.name, kind) not in already:
+                    _send_reminder(s, rnd, p, kind, now, deliver)
+                    sent.append((rnd.id, p.name, kind))
+                    already.add((p.name, kind))
+    return sent
+
+
+def nudge_pending(s: Session, token: str, now: datetime | None = None, deliver=notify.deliver) -> dict:
+    """Host only: remind everyone who hasn't answered, now. Delivery results are reported honestly
+    (names, channels and statuses; never content). A person is not nudged twice within 10 minutes."""
     now = now or now_utc()
     p, rnd = _auth(s, token, now)
     if not p.is_host:
         raise HuddleError("host_only", "Only the host can nudge.", 403)
     rnd = advance(s, rnd, now)
-    answers = _answers(s, rnd.id)
-    pending = [q.name for q in _participants(s, rnd.id)
-               if q.id not in answers or answers[q.id].is_default]
-    return {"round_state": rnd.state, "pending": pending,
-            "message": f"Reminder sent to {len(pending)} people." if pending else "Everyone answered."}
+    pending = [] if rnd.state == "closed" else _pending(s, rnd)
+    last = {}
+    for e in _reminder_events(s, rnd.id):
+        last[e.actor] = max(last.get(e.actor, e.at), e.at)
+    results = []
+    for q in pending:
+        if q.name in last and now - last[q.name] < MANUAL_REMINDER_GAP:
+            results.append({"name": q.name, "channel": "all", "status": "skipped",
+                            "detail": "reminded recently"})
+            continue
+        for d in _send_reminder(s, rnd, q, "manual", now, deliver):
+            results.append({"name": q.name, "channel": d.channel, "status": d.status, "detail": d.detail})
+    sent_to = sorted({r["name"] for r in results if r["status"] in ("queued", "sent")})
+    return {"round_state": rnd.state, "pending": [q.name for q in pending], "deliveries": results,
+            "message": (f"Reminded {', '.join(sent_to)}." if sent_to
+                        else "Everyone answered." if not pending else "Nobody needed a new reminder yet.")}
 
 
 def close_round(s: Session, token: str, now: datetime | None = None) -> dict:

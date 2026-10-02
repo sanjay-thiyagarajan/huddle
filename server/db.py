@@ -72,6 +72,12 @@ class HouseholdLoad(SQLModel, table=True):
     total_hours: int
 
 
+class Contact(SQLModel, table=True):
+    """Optional email for reminders. Server-side only: never returned by any API or written to logs."""
+    participant_id: str = Field(primary_key=True)
+    email: str
+
+
 class PersonalShare(SQLModel, table=True):
     """One person's own hours per task. Returned ONLY to that person (never in the group result)."""
     id: int | None = Field(default=None, primary_key=True)

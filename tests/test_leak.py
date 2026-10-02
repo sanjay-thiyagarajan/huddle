@@ -46,6 +46,7 @@ MODE_CASES = [("everyday", lambda n: _answer(EVERYDAY[n]), lambda n: str(EVERYDA
 
 
 def _check(label, body, viewer):
+    assert "sentinel@example.test" not in body, f"{label} exposed a contact email"
     leaks = privacy.find_leaks(body, SENTINELS, viewer) + \
         privacy.find_attributed_buckets(body, BUCKETS, viewer)
     assert not leaks, f"{label} as {viewer} leaked: {leaks}\n{body[:400]}"
@@ -62,7 +63,8 @@ async def test_leak_rest_every_route_every_participant(fresh_db, mode, make_answ
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = (await c.post("/api/rounds", json={
             "mode": mode, "deadline_seconds": 3600,
-            "participants": [{"name": n} for n in EVERYDAY]})).json()
+            "participants": [{"name": n, "email": f"{n.lower()}.sentinel@example.test"}
+                             for n in EVERYDAY]})).json()
         toks = {p["name"]: p["token"] for p in r["participants"]}
         calls = []  # (label, response) gathered before and after submission and close
 

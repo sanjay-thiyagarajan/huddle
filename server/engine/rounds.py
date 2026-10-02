@@ -404,7 +404,13 @@ def revisit_round(s: Session, token: str, need: dict | None = None, deadline_sec
         need = need or (rnd.need if rnd.mode == "care" else None)
     else:
         need = None
-    people = [{"name": q.name, "channel": q.channel} for q in _participants(s, rnd.id)]
+    people = []
+    for q in _participants(s, rnd.id):
+        entry = {"name": q.name, "channel": q.channel}
+        contact = s.get(Contact, q.id)
+        if contact:
+            entry["email"] = contact.email  # kept server-side so reminders continue; never returned
+        people.append(entry)
     detail = (f"follow-up to round {rnd.id}" if new_mode == rnd.mode
               else f"next decision ({new_mode}) after round {rnd.id}")
     return create_round(s, new_mode, people, deadline_seconds, need, now,

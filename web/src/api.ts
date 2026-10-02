@@ -8,6 +8,8 @@ export interface CheckinSummary {
   comfortable_count?: number; warning?: string;
 }
 export interface ShareLine { task_id: string; label: string; hours: number }
+export interface Delivery { name: string; channel: string; status: string; detail: string }
+export interface NudgeResult { pending: string[]; deliveries: Delivery[]; message: string }
 export interface Hint { message: string; suggested_dealbreakers: string[] }
 export interface HouseholdPlan { round_id: string; mode: Mode; title: string; summary: string; at: string; checkin: string | null }
 export interface Status {
@@ -18,6 +20,7 @@ export interface Status {
   participants: { name: string; channel: Channel; answered: boolean }[];
   events: AuditEvent[];
   hints: Hint[];
+  reminder: { at: string; kind: string } | null;
 }
 export interface Holds { stored: { name: string; has_answer: boolean; value: string }[] }
 export interface Draft {

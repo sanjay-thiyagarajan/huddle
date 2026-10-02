@@ -5,12 +5,14 @@ import MyShare from "../MyShare";
 import NeedEditor, { DEFAULT_TASKS, needPayload } from "../NeedEditor";
 import type { TaskDraft } from "../NeedEditor";
 import { api, listen, speechSupported, tool } from "../api";
-import type { Channel, CheckinSummary, Hint, Holds, HouseholdPlan, Mode, Person, Result, ShareLine, Status } from "../api";
+import { inviteText, shareOrCopy } from "../share";
+import type { Channel, CheckinSummary, Delivery, Hint, Holds, HouseholdPlan, Mode, NudgeResult, Person, Result, ShareLine, Status } from "../api";
 import Reveal from "../reveal/Reveal";
 import VoiceSession from "../VoiceSession";
 import { ENROL_PHRASES, enrolVoice, identifyVoice, recordWav } from "../voice";
 
-const PRESETS: Record<Mode, { name: string; channel: Channel }[]> = {
+interface Invitee { name: string; channel: Channel; email?: string }
+const PRESETS: Record<Mode, Invitee[]> = {
   everyday: [{ name: "Maya", channel: "voice" }, { name: "Ben", channel: "voice" }],
   care: [{ name: "Maya", channel: "voice" }, { name: "Ben", channel: "voice" }, { name: "Chen", channel: "link" }],
   trip: [{ name: "Maya", channel: "voice" }, { name: "Ben", channel: "voice" }, { name: "Chen", channel: "link" }],
@@ -49,6 +51,8 @@ export default function Simulator() {
   const [holds, setHolds] = useState<Holds | null>(null);
   const [showHolds, setShowHolds] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [voiceMsg, setVoiceMsg] = useState<string | null>(null);
@@ -76,7 +80,8 @@ export default function Simulator() {
     try {
       const need = mode === "care" ? needPayload(tasks, dollars) : undefined;
       const out = await tool<{ participants: Person[] }>("start_huddle", {
-        mode, participants: people.filter((p) => p.name.trim()), deadline_seconds: demoClock ? 45 : 3600, need,
+        mode, participants: people.filter((p) => p.name.trim()).map((p) => ({ ...p, email: p.email?.trim() || undefined })),
+        deadline_seconds: demoClock ? 45 : 3600, need,
       });
       setRound(out.participants); setActive(out.participants[0].name); setResult(null); setCheckin(null); setNote(null); setPlans([]); setOnScreen([]); setOnPhone([]); setRevoice(null);
     } catch (e) { setError((e as Error).message); }
@@ -127,8 +132,9 @@ export default function Simulator() {
 
   async function nudge() {
     if (!host) return;
-    const r = await tool<{ pending: string[]; message: string }>("nudge_pending", { token: host.token });
-    setNote(r.pending.length ? `Reminder sent to ${r.pending.join(", ")}.` : r.message);
+    const r = await tool<NudgeResult>("nudge_pending", { token: host.token });
+    setNote(r.message);
+    setDeliveries(r.deliveries);
   }
   async function closeNow() {
     if (!host) return;
@@ -219,6 +225,11 @@ export default function Simulator() {
                     <option value="voice">Here, by voice</option>
                     <option value="link">Remote, by link</option>
                   </select>
+                  {p.channel === "link" && (
+                    <input className="email-input" type="email" aria-label={`Email for reminders for ${p.name || "this person"} (optional)`}
+                      placeholder="Email for reminders (optional, only if they agreed)" value={p.email ?? ""}
+                      onChange={(e) => setPeople(people.map((q, j) => j === i ? { ...q, email: e.target.value } : q))} />
+                  )}
                 </div>
               ))}
               {people.length < 6 && <button type="button" className="ghost" onClick={() => setPeople([...people, { name: "", channel: "voice" }])}>Add a person</button>}
@@ -241,6 +252,11 @@ export default function Simulator() {
             </ul>
             {state === "reminded" && <p className="banner note" role="status">A reminder went out to anyone still waiting.</p>}
             {note && <p className="fine" role="status">{note}</p>}
+            {deliveries.length > 0 && (
+              <ul className="audit" aria-label="Reminder delivery">
+                {deliveries.map((d, i) => <li key={i}>{d.name}: {d.channel === "in_app" ? "in-app" : d.channel} {d.status}{d.detail ? ` (${d.detail})` : ""}</li>)}
+              </ul>
+            )}
             {!result && (
               <div className="row">
                 <button className="ghost" onClick={() => void nudge()}>Remind people</button>
@@ -374,8 +390,11 @@ export default function Simulator() {
                 <code>{window.location.origin}{person.link}</code>
                 <div className="row">
                   <button className="ghost" onClick={() => void navigator.clipboard?.writeText(window.location.origin + person.link)}>Copy link</button>
+                  <button className="ghost" onClick={() => void shareOrCopy({ title: "Huddle", text: inviteText(person.name), url: window.location.origin + person.link })
+                    .then((r) => setShareMsg(r === "failed" ? "Couldn't open sharing. Copy the link instead." : r === "copied" ? "Invite copied. Paste it into a message." : "Invite ready to send."))}>Share invite</button>
                   <a className="ghost" href={person.link} target="_blank" rel="noreferrer">Open their page</a>
                 </div>
+                {shareMsg && <p className="fine" role="status">{shareMsg}</p>}
               </div>
             ) : voiceOnly && !onScreen.includes(person.name) ? (
               <VoiceSession key={person.token} token={person.token} name={person.name}

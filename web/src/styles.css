@@ -99,3 +99,4 @@ a:not(.ghost) { color: var(--lagoon); text-underline-offset: 3px; }
 .say-row { margin-bottom: .5rem; }
 .myshare { background: var(--dusk-tint); border-left: 6px solid var(--dusk); border-radius: 4px 12px 12px 4px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
 .myshare ul { margin: .25rem 0 .5rem; padding-left: 1.1rem; }
+.person-row .email-input { grid-column: 1 / -1; }

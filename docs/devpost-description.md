@@ -30,7 +30,7 @@ It decides; it does not book, split expenses or give medical, legal or financial
 - Privacy here is no-attribution plus bucketing, **not cryptographic secrecy**. With two people the other can infer your number; with three or more, who set a limit is hidden. The UI says so.
 - Care mode shows the group who owns each task and never anyone's hours (each person sees only their own, privately). It can still hint: a person who owns a task alone can cover at least that task's hours. On a shared screen, a selected profile's own hours are visible to anyone nearby.
 - Voice ID is a stand-in, not security; accuracy was measured on synthetic voices only. [REAL-VOICE RESULT, if collected.]
-- The Alexa+ experience is simulated; reminders are simulated.
+- The Alexa+ experience is simulated. Reminders are real (a background scheduler; in-app banners and notifications while a page is open; email only when SMTP is configured) but there is no SMS, web push or Alexa notification.
 
 ### Tracks and challenges
 Primary track: **Alexa+**. Mini-challenges: **AWS Builder** [only if the AWS parts above ran] and **Open Source** (public MIT repo created after Aug 31, 2026).

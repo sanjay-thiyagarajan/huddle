@@ -223,3 +223,15 @@ async def test_scheduler_loop_closes_overdue_rounds_by_itself(session, monkeypat
             raise AssertionError("scheduler never closed the overdue round")
     finally:
         task.cancel()
+
+
+def test_next_round_keeps_reminder_emails_without_exposing_them(session):
+    r = rounds.create_round(session, "care", PEOPLE, 3600, now=T0)
+    tok = {p["name"]: p["token"] for p in r["participants"]}
+    rounds.close_round(session, tok["Maya"], T0)
+    nxt = rounds.revisit_round(session, tok["Maya"], now=T0)
+    assert "ben.sentinel" not in json.dumps(nxt)
+    rec = Recorder()
+    rounds.tick(session, T0 + timedelta(minutes=31), rec)
+    assert {c["name"]: c["email"] for c in rec.calls} == {
+        "Maya": None, "Ben": "ben.sentinel@example.test", "Chen": None}

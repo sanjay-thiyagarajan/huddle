@@ -19,7 +19,7 @@
 ## What is simulated or unverified (do not overclaim)
 - **The Alexa+ experience is a web simulator.** Alexa+ developer tools are preview and select-partner only, so none of this has run on a real device.
 - In the simulator, "speaking" is typed text with an optional microphone (browser speech recognition) and browser text-to-speech.
-- **Reminders are simulated** (a state change, nothing is sent). I have not verified what Alexa+ supports for notifications or quiet responses, and no feature here depends on them.
+- **Reminders do not use Alexa.** They are delivered by Huddle's own scheduler: in-app (while a page is open), optional email, and the device share sheet. I have not verified what Alexa+ supports for notifications or quiet responses, and no feature here depends on them.
 - Voice ID accuracy has only been measured on synthetic voices.
 - On a screenless speaker, a person can't check what was understood without hearing it back, which is the trade-off behind the opt-in read-back. A misheard number could be saved. The phone link and the screen are the safer ways to confirm.
 

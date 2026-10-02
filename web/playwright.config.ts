@@ -10,7 +10,7 @@ export default defineConfig({
   use: { baseURL: "http://127.0.0.1:8001", channel: "chrome" }, // installed Chrome; no browser download
   webServer: {
     command:
-      `npm run build && cd .. && rm -f e2e.db && HUDDLE_MODE=mock HUDDLE_PORT=8001 HUDDLE_DB_URL=sqlite:///e2e.db ${uvicorn} server.api:app --port 8001`,
+      `npm run build && cd .. && rm -f e2e.db && HUDDLE_MODE=mock HUDDLE_TICK_SECONDS=2 HUDDLE_PORT=8001 HUDDLE_DB_URL=sqlite:///e2e.db ${uvicorn} server.api:app --port 8001`,
     url: "http://127.0.0.1:8001/api/health",
     reuseExistingServer: false,
     timeout: 120_000,

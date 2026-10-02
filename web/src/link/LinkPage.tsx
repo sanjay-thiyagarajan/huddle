@@ -14,6 +14,8 @@ export default function LinkPage({ token }: { token: string }) {
   const [share, setShare] = useState<ShareLine[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
+  const [perm, setPerm] = useState<NotificationPermission | "unsupported">(
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission);
 
   const refresh = useCallback(async () => {
     try {
@@ -25,6 +27,18 @@ export default function LinkPage({ token }: { token: string }) {
       }
     } catch (e) { setError((e as Error).message); }
   }, [token]);
+
+  // A new reminder while the page is open: show a browser notification if the person allowed it.
+  const reminderAt = status?.reminder?.at;
+  useEffect(() => {
+    if (!reminderAt || perm !== "granted") return;
+    const key = `huddle-reminder-${token.slice(0, 12)}`;
+    try {
+      if (sessionStorage.getItem(key) === reminderAt) return;
+      sessionStorage.setItem(key, reminderAt);
+    } catch { /* storage unavailable: notify once per page load */ }
+    new Notification("Huddle", { body: "Your private answer is still needed. It takes about two minutes." });
+  }, [reminderAt, perm, token]);
 
   useEffect(() => {
     void refresh();
@@ -45,6 +59,18 @@ export default function LinkPage({ token }: { token: string }) {
       </p>
       {care && status.need.tasks && (
         <p className="fine">The plan needs {status.need.tasks.reduce((n, t) => n + t.hours, 0)} h/week and ${status.need.dollars_per_month?.toLocaleString()}/month. Decision aid, not medical, legal or financial advice.</p>
+      )}
+      {status.reminder && !status.me.answered && status.state !== "closed" && (
+        <p className="banner warn" role="alert">
+          {status.reminder.kind === "final" ? "Reminder: the deadline is close. Your answer is still needed."
+            : "Reminder: your private answer is still needed."}
+        </p>
+      )}
+      {perm === "default" && !status.me.answered && (
+        <p className="fine">
+          <button className="ghost" onClick={() => void Notification.requestPermission().then(setPerm)}>Notify me on this device</button>{" "}
+          Get a notification here if a reminder comes while this page is open.
+        </p>
       )}
       {result ? (
         <>

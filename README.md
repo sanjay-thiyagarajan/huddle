@@ -30,7 +30,7 @@ A family doesn't make one decision, it makes a stream of them, and they're conne
 1. **Asks each person privately**, the way that suits them: by voice at a shared device, or through a private one-time link on their own phone.
 2. **Computes what is compatible** from everyone's limits, and only reports group-level results in coarse bands, never attributed to a person.
 3. **Proposes one plan and explains the trade-off** ("Picked X; some of you preferred Y, but the budget ruled it out") without naming anyone.
-4. **Handles people who don't answer**: a reminder, then a stated default, so the group isn't stuck.
+4. **Reminds people who haven't answered, for real**: a background scheduler sends a first reminder half-way and a final one near the deadline, and the host can nudge now. Each person gets an in-app banner (plus a browser notification if they allow it) and, if the host entered an address they agreed to, an email. Then, if they still don't answer, a stated default, so the group isn't stuck.
 5. **Checks in the day after**: each person privately rates how the plan sits with them; the group sees only an unattributed summary.
 6. **Lets people change their mind**: an answer can be revised until the round closes. The group sees that something was revised, never who.
 7. **Plans the next round**: if someone isn't comfortable (or a month later), the host opens a follow-up round for the same people. Everyone answers from scratch and nothing private carries over. In care mode a **fair-share record** counts heavy tasks (overnight cover, appointments) across rounds from past assignments only, and the next split rotates them where limits allow.
@@ -88,20 +88,28 @@ make docker   # or: docker compose up --build  -> http://localhost:8000
 
 Optional extras: `pip install '.[voice]'` (speaker ID and Whisper), `pip install '.[aws]'` (Strands and Bedrock).
 
+## Reminders and invites: configuration
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `HUDDLE_PUBLIC_URL` | `http://localhost:8000` | Address used for the links inside reminder emails. Set it to where people can actually reach this server. |
+| `HUDDLE_TICK_SECONDS` | `15` | How often the scheduler sends due reminders and closes overdue rounds. |
+| `HUDDLE_SMTP_HOST`, `_PORT` (587), `_USER`, `_PASSWORD`, `_FROM`, `_STARTTLS` (1) | unset | Turns on email. Unset means email is reported as "skipped". |
+
 ## Honest limits
 
 - **Privacy is no-attribution plus bucketing, not cryptographic secrecy.** With **two people**, the other person can infer your number from a band; the UI says so. With three or more, who set a limit is hidden. Research systems that give real cryptographic guarantees exist (see the novelty notes); Huddle doesn't claim that.
 - **Care mode shows who owns each task, never anyone's hours.** Each person sees their own hours privately. It can still hint: someone who owns a task alone can cover at least that task's hours, because the task's hours are public. The fair-share record counts plans in which someone held a heavy task, not hours. On a shared screen, a selected profile's own hours are visible to anyone nearby (the app says so); the phone link is the private place.
 - **Voice identification is a stand-in for Alexa person recognition.** It separates profiles on a shared device and is not security. Accuracy has only been measured on synthetic text-to-speech voices ([docs/voice-accuracy.md](docs/voice-accuracy.md)): that shows the pipeline works, not how it behaves for real family voices.
 - **The Alexa+ experience is simulated.** The Alexa+ developer tools are preview and select-partner only; the simulator and the MCP server are both in this repo.
-- Reminders are simulated: the round's state changes when the reminder time passes, and nothing is actually sent.
+- **Reminders are real but limited.** In-app banners and browser notifications reach a person only while their page is open (no web push). Email goes out only if SMTP is configured and the host entered an address; with no SMTP it says "skipped", never "sent". There is no SMS (the plan cuts it for carrier registration) and no Alexa notification (I couldn't verify what Alexa+ supports). The host can also share the invite or a nudge through the device's own share sheet. Reminder text names only the recipient and contains no values and nothing about who else has answered. Email addresses are stored server-side and never returned by any API or written to logs.
 
 ## Status (what is verified, what is not)
 
 | Area | State |
 |---|---|
-| MCP server, privacy engine, three decision types in one household, check-in, revision, next round and fair-share record, care-load hints, plan history, plan card, audit trail | Built; 95 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
-| Simulator and private link flow | Built; 15 browser tests (demo flows, failure path, each feature, voice-only privacy, phone width, accessibility in light and dark, microphone path) |
+| MCP server, privacy engine, three decision types in one household, check-in, revision, next round and fair-share record, care-load hints, plan history, plan card, audit trail | Built; 108 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
+| Simulator and private link flow | Built; 18 browser tests (demo flows, failure path, each feature, voice-only privacy, phone width, accessibility in light and dark, microphone path) |
 | Voice ID and Whisper | Built; measured on synthetic voices only |
 | Strands agent on Bedrock, AgentCore hosting | Code and notes written, **never run against AWS** |
 | Fictional-family simulation (synthetic voices: speaker ID, Whisper, voice-only dialogue, MCP, engine) | Passes end to end ([docs/family-simulation.md](docs/family-simulation.md)). **Tests the pipeline only; not evidence that Huddle helps real people** |

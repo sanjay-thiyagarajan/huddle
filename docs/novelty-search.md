@@ -34,3 +34,20 @@ architecture as Huddle. The differentiator has to be the mechanic and the eviden
 3. **Architecture alone will not stand out.** HomeOps matches the MCP + Strands + Bedrock + React simulator stack. What Huddle has that the entries I read do not: the automated leak test, the k-rule and bucketing, the failure path with stated defaults, and (once collected) real-group results. Lead with those. **Real AWS runs and real-user results are the gaps** that most separate a strong entry from a similar one.
 4. **Possible borrowing:** KindHandoff's single-use invites and HomeOps' audit log show judges are seeing "approval" and "audit" ideas. A host-visible, value-free audit trail (who answered when, never what) would fit Huddle; not built.
 5. **Care mode vs CareSplit-style apps:** position as the *decision before the logging*: agree on a split with private limits, then use a tracker. Avoid implying Huddle replaces them.
+
+## Addendum: household chores (searched 2026-10-03)
+**This space is crowded; do not claim novelty for "a fair chore agent".** Web search surfaced many apps, found
+through search results and store listings (not tested by us), that already offer parts of this:
+- **Effort-weighted fairness scores and automatic assignment:** Chore Chores, FairShare, Tidywell, ChoreLoop ("Fair Play Score").
+- **Mental load as a first-class idea:** FairPlay (chores for couples; tracks who thought of a task as well as who did it) and FairShare ("Noticing Score"), both inspired by Eve Rodsky's *Fair Play* method.
+- **Plain-language and AI assistants:** HomeChores AI ("Chorie", handles tasks you say or type), ChoreLoop's AI assistant, and FairShare's "AI Brain Dump" that proposes owners.
+- **Remembered preferences:** FairChore preselects members from past choices.
+
+**What I did not find in any of them:** each person's availability, preferences and limits being kept private from
+the rest of the household, with the group shown only an unattributed plan and a fairness report. Their fairness is
+computed from visible effort and completions. **That privacy mechanic, plus the connection to the care and
+family-decision features and the MCP/voice interface, is Huddle's differentiator here.** Lead with it.
+
+Other differences worth stating plainly (and not overstating): the ask-accept-decline loop never reveals who was
+asked or who declined; exemptions are capped and availability has a floor so private self-reports can't be used to
+dodge a fair share; a heavy week lightens the next one; heavy and mental-load chores rotate.

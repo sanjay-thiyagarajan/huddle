@@ -190,6 +190,10 @@ export function ChoreBoard({ token, st, onChange }: { token: string; st: HomeSta
   }
 
   const rows = st.plan.assignments;
+  const [copied, setCopied] = useState(false);
+  // Only what the whole household already sees: chores, owners and status. No private limits.
+  const planText = () =>
+    [`${st.home.name}: chores for ${st.home.week} to ${st.home.week_end}`, "", ...rows.map((a) => `${a.title} (${fmtMin(a.minutes)}): ${a.owner ?? "not yet"}${a.status === "done" ? ", done" : ""}`), "", st.plan.headline].join("\n");
   return (
     <section className="home-board" aria-labelledby="board-h">
       <h3 id="board-h">This week: {st.home.week} to {st.home.week_end}</h3>
@@ -248,7 +252,10 @@ export function ChoreBoard({ token, st, onChange }: { token: string; st: HomeSta
               ))}
             </tbody>
           </table>
-          {st.me.is_admin && <button className="ghost" onClick={() => void plan(true)}>Redo the plan</button>}
+          <div className="row">
+            <button className="ghost" onClick={() => void navigator.clipboard.writeText(planText()).then(() => setCopied(true))}>{copied ? "Plan copied" : "Copy this week's plan"}</button>
+            {st.me.is_admin && <button className="ghost" onClick={() => void plan(true)}>Redo the plan</button>}
+          </div>
         </>
       )}
     </section>

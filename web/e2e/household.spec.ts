@@ -174,3 +174,22 @@ test("household pages have no accessibility violations in light and dark, and fi
   expect(overflow).toBeLessThanOrEqual(0);
   expect((await wcag(page)).violations).toEqual([]);
 });
+
+test("the copied weekly plan holds only what the whole household already sees", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await createAndPlan(page);
+  await page.getByLabel("Hours of chores you can take this week").fill("5.3");
+  await page.getByText("Preferences and skills").click();
+  await page.getByLabel("How you feel about Cooking").selectOption("cannot");
+  await page.getByLabel("Things you know how to do").fill("sentinelplumbing");
+  await page.getByRole("button", { name: "Save my limits" }).click();
+  await expect(page.getByText("Saved. Only you can see this.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Copy this week's plan" }).click();
+  await expect(page.getByRole("button", { name: "Plan copied" })).toBeVisible();
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  expect(text).toContain("Our home: chores for");
+  expect(text).toMatch(/Take out the bins \(10 min\): \w+/);
+  expect(text).toContain("fair share");
+  for (const secret of ["sentinelplumbing", "5.3", "cannot", "love", "Hours of chores"]) expect(text).not.toContain(secret);
+});

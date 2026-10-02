@@ -23,7 +23,7 @@ BUCKETS = {n: [privacy.money_bucket(EVERYDAY[n]), privacy.hours_bucket(CARE_HOUR
 COVERED_ROUTES = {"/api/health", "/api/rounds", "/api/status", "/api/answers", "/me/answers",
                   "/api/result", "/api/close", "/api/nudge", "/api/server-holds",
                   "/api/agent/tool", "/api/agent/parse", "/api/agent/explain", "/api/checkin",
-                  "/api/plan-card"}
+                  "/api/plan-card", "/api/household"}
 # Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
 VOICE_ROUTES = {"/api/voice/enrol", "/api/voice/identify", "/api/voice/transcribe",
                 "/api/voice/profiles", "/api/voice/profiles/{name}"}
@@ -97,7 +97,7 @@ async def test_leak_rest_every_route_every_participant(fresh_db, mode, make_answ
             assert resp.status_code == 200, resp.text
             _check("checkin", resp.text, name)
         for viewer, tok in toks.items():
-            for path in ("/api/status", "/api/result", "/api/plan-card"):
+            for path in ("/api/status", "/api/result", "/api/plan-card", "/api/household"):
                 body = (await c.get(path, params={"token": tok})).text
                 _check(f"after checkin {path}", body, viewer)
                 assert "score" not in body, f"{path} exposes a score field"
@@ -189,7 +189,8 @@ async def test_leak_two_round_care_chain_and_fairness(session):
     toks2 = run_round(second)
     for toks in (toks1, toks2):
         for viewer, tok in toks.items():
-            for fn in (rounds.status, rounds.get_result, rounds.plan_card, rounds.my_answers):
+            for fn in (rounds.status, rounds.get_result, rounds.plan_card, rounds.my_answers,
+                       rounds.household_history):
                 body = json.dumps(fn(session, tok, t0), default=str)
                 if fn is rounds.my_answers:
                     assert str(CARE_HOURS[viewer]) in body  # owner sees own

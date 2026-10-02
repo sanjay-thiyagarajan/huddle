@@ -244,6 +244,7 @@ def status(s: Session, token: str, now: datetime | None = None) -> dict:
         "deadline_at": rnd.deadline_at.isoformat(), "reminder_at": rnd.reminder_at.isoformat(),
         "need": rnd.need,
         "me": {"name": p.name, "is_host": p.is_host, "answered": p.id in answers},
+        "hints": _hints(s, rnd, p),
         "participants": [{"name": q.name, "channel": q.channel, "answered": q.id in answers
                           and not answers[q.id].is_default} for q in parts],
         "options": getattr(_mode(rnd.mode), "OPTIONS", None),
@@ -287,11 +288,12 @@ def get_result(s: Session, token: str, now: datetime | None = None) -> dict:
 
 
 def revisit_round(s: Session, token: str, need: dict | None = None, deadline_seconds: int = 3600,
-                  now: datetime | None = None) -> dict:
-    """Host only, after a round closes: open a follow-up round for the same people.
+                  now: datetime | None = None, mode: str | None = None) -> dict:
+    """Host only, after a round closes: open the household's next round for the same people.
 
-    Nothing private carries over: everyone answers again from scratch. The new round joins the same
-    household chain, so the fairness record can rotate heavy tasks. Returns fresh tokens.
+    `mode` defaults to the same decision type (a follow-up) or can be another one (for example a
+    weekend plan after a care plan). Nothing private carries over: everyone answers from scratch.
+    The new round joins the same household, so the fairness record and care-load hints continue.
     """
     now = now or now_utc()
     p, rnd = _auth(s, token, now)
@@ -300,9 +302,83 @@ def revisit_round(s: Session, token: str, need: dict | None = None, deadline_sec
         raise HuddleError("host_only", "Only the host can start the next round.", 403)
     if rnd.state != "closed":
         raise HuddleError("not_closed", "Finish this round before starting the next one.", 409)
+    new_mode = mode or rnd.mode
+    _mode(new_mode)
+    if new_mode == "care":
+        need = need or (rnd.need if rnd.mode == "care" else None)
+    else:
+        need = None
     people = [{"name": q.name, "channel": q.channel} for q in _participants(s, rnd.id)]
-    return create_round(s, rnd.mode, people, deadline_seconds, need or rnd.need, now,
-                        household_id=_household(s, rnd.id), detail=f"follow-up to round {rnd.id}")
+    detail = (f"follow-up to round {rnd.id}" if new_mode == rnd.mode
+              else f"next decision ({new_mode}) after round {rnd.id}")
+    return create_round(s, new_mode, people, deadline_seconds, need, now,
+                        household_id=_household(s, rnd.id), detail=detail)
+
+
+# Which leisure dealbreakers a heavy care load might make someone want to rule out.
+_HINT_BY_MODE = {
+    "everyday": [("early_start", "early starts"), ("long_drive", "long drives"),
+                 ("physical", "physical effort")],
+    "trip": [("early_start", "early starts"), ("long_drive", "long drives"),
+             ("strenuous", "strenuous activity")],
+}
+
+
+def _hints(s: Session, rnd: Round, p: Participant) -> list[dict]:
+    """Optional private hint for ONE person, from their own public care assignment in this household.
+
+    Shown only to them and never applied automatically. Built from the published split
+    (`heavy_hours_this_plan`), so it adds nothing that everyone in the group doesn't already see.
+    """
+    options = _HINT_BY_MODE.get(rnd.mode)
+    if not options:
+        return []
+    hh = _household(s, rnd.id)
+    best = None
+    for link in s.exec(select(RoundHousehold).where(RoundHousehold.household_id == hh)):
+        other = s.get(Round, link.round_id)
+        if other and other.mode == "care" and other.state == "closed" and other.result:
+            closed_events = s.exec(select(Event).where(Event.round_id == other.id, Event.kind == "closed"))
+            when = max((e.at for e in closed_events), default=None)
+            if best is None or (when and when > best[0]):
+                best = (when, other)
+    if best is None:
+        return []
+    heavy = best[1].result.get("heavy_hours_this_plan", {}).get(p.name, 0)
+    if heavy <= 0:
+        return []
+    labels = ", ".join(label for _, label in options)
+    return [{
+        "message": (f"In your household's latest care plan you carry {heavy} h/week of heavy tasks "
+                    f"(overnight cover, appointments and transport). If that limits what you can do, you "
+                    f"could rule out {labels}. Optional, and only you see this."),
+        "suggested_dealbreakers": [key for key, _ in options],
+    }]
+
+
+def household_history(s: Session, token: str, now: datetime | None = None) -> dict:
+    """The household's closed plans, oldest first. Aggregate only: the same things already shown to all."""
+    p, rnd = _auth(s, token, now or now_utc())
+    items = []
+    for link in s.exec(select(RoundHousehold).where(RoundHousehold.household_id == _household(s, rnd.id))):
+        r = s.get(Round, link.round_id)
+        if not r or r.state != "closed" or not r.result:
+            continue
+        closed_events = s.exec(select(Event).where(Event.round_id == r.id, Event.kind == "closed"))
+        closed = max((e.at for e in closed_events), default=r.created_at)
+        res = r.result
+        if r.mode == "care":
+            summary = res["headline"]
+        elif res.get("plan"):
+            summary = f"{res['plan']['name']}, around {res['plan']['price_band']} per person"
+        else:
+            summary = "No plan fit every limit"
+        checkin = _checkin_summary(s, r)
+        items.append({"round_id": r.id, "mode": r.mode, "title": card.build_card(res)["title"],
+                      "summary": summary, "at": closed.isoformat(),
+                      "checkin": checkin.get("message") if checkin.get("complete") else None})
+    items.sort(key=lambda i: i["at"])
+    return {"plans": items}
 
 
 def plan_card(s: Session, token: str, now: datetime | None = None) -> dict:

@@ -74,7 +74,9 @@ def submit_checkin(token: str, score: int) -> dict[str, Any]:
 
 
 @mcp.tool()
-def revisit_round(token: str, need: dict | None = None, deadline_seconds: int = 3600) -> dict[str, Any]:
-    """Host only, after a round closes: open a follow-up round for the same people. Nothing private
-    carries over; everyone answers again. Returns fresh tokens, like start_huddle."""
-    return _run(rounds.revisit_round, token, need, deadline_seconds)
+def revisit_round(token: str, need: dict | None = None, deadline_seconds: int = 3600,
+                  mode: str | None = None) -> dict[str, Any]:
+    """Host only, after a round closes: open the household's next round for the same people.
+    mode defaults to the same decision (a follow-up); pass another mode (care, everyday, trip) to
+    start a different decision for the same family. Nothing private carries over. Returns fresh tokens."""
+    return _run(rounds.revisit_round, token, need, deadline_seconds, None, mode)

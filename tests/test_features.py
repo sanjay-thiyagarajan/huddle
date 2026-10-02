@@ -211,3 +211,91 @@ def test_plan_card_everyday_and_checkin_line(session):
         rounds.submit_checkin(session, tok[name], score, T0)
     card = rounds.plan_card(session, tok["Maya"], T0)
     assert card["title"] == "Weekend plan" and "Day-after check-in: Everyone is comfortable" in card["text"]
+
+
+# ---- one household, many decisions ---------------------------------------------------------------
+
+LEISURE_TASKS = HEAVY_NEED  # overnight 6 h + check-in 2 h
+
+
+def closed_care_household(session):
+    """Maya and Ben can both do heavy tasks; Chen has no hours. Returns (tokens, result)."""
+    people = [{"name": "Maya"}, {"name": "Ben"}, {"name": "Chen"}]
+    r = rounds.create_round(session, "care", people, 3600, need=HEAVY_NEED, now=T0)
+    tok = {p["name"]: p["token"] for p in r["participants"]}
+    answers = {"Maya": care_answer(8), "Ben": care_answer(8), "Chen": care_answer(0)}
+    res = run_care_round(session, tok, answers)
+    return tok, res
+
+
+def test_next_decision_can_be_a_different_mode_for_the_same_people(session):
+    tok, _ = closed_care_household(session)
+    nxt = rounds.revisit_round(session, tok["Maya"], now=T0, mode="everyday")
+    assert nxt["mode"] == "everyday" and [p["name"] for p in nxt["participants"]] == ["Maya", "Ben", "Chen"]
+    st = rounds.status(session, nxt["participants"][0]["token"], T0)
+    assert st["mode"] == "everyday" and st["need"] == {} and st["state"] == "collecting"
+    assert any("next decision (everyday)" in (e["detail"] or "") for e in st["events"])
+    with pytest.raises(rounds.HuddleError) as e:
+        rounds.revisit_round(session, tok["Maya"], now=T0, mode="nonsense")
+    assert e.value.code == "bad_mode"
+
+
+def test_back_to_care_after_a_weekend_keeps_the_household_and_default_need(session):
+    tok, _ = closed_care_household(session)
+    wk = rounds.revisit_round(session, tok["Maya"], now=T0, mode="everyday")
+    wk_tok = {p["name"]: p["token"] for p in wk["participants"]}
+    for name, t in wk_tok.items():
+        rounds.submit_answer(session, t, ev(200), T0)
+    again = rounds.revisit_round(session, wk_tok["Maya"], now=T0, mode="care")
+    st = rounds.status(session, again["participants"][0]["token"], T0)
+    assert st["mode"] == "care" and len(st["need"]["tasks"]) == 5  # the default care need
+    hist = rounds.household_history(session, again["participants"][0]["token"], T0)["plans"]
+    assert [h["mode"] for h in hist] == ["care", "everyday"]
+
+
+def test_care_load_hint_goes_only_to_the_person_who_carries_it_and_only_in_leisure(session):
+    tok, res = closed_care_household(session)
+    heavy = res["heavy_hours_this_plan"]
+    nxt = rounds.revisit_round(session, tok["Maya"], now=T0, mode="trip")
+    t2 = {p["name"]: p["token"] for p in nxt["participants"]}
+    for name in ("Maya", "Ben", "Chen"):
+        hints = rounds.status(session, t2[name], T0)["hints"]
+        if heavy[name] > 0:
+            assert len(hints) == 1
+            h = hints[0]
+            assert f"{heavy[name]} h/week" in h["message"] and "only you see this" in h["message"]
+            assert h["suggested_dealbreakers"] == ["early_start", "long_drive", "strenuous"]  # trip words
+        else:
+            assert hints == []  # Chen carries nothing: no hint
+    # A hint contains the person's own public heavy-hours figure and no private capacity or dollars
+    text = rounds.status(session, t2["Maya"], T0)["hints"]
+    assert "dollars" not in str(text) and "capacity" not in str(text)
+
+
+def test_hint_vocabulary_matches_the_mode_so_suggestions_are_valid_answers(session):
+    tok, res = closed_care_household(session)
+    carer = next(n for n, h in res["heavy_hours_this_plan"].items() if h > 0)
+    for mode in ("everyday", "trip"):
+        nxt = rounds.revisit_round(session, tok["Maya"], now=T0, mode=mode)
+        t = {p["name"]: p["token"] for p in nxt["participants"]}
+        sug = rounds.status(session, t[carer], T0)["hints"][0]["suggested_dealbreakers"]
+        # Applying the suggestion must validate against that mode's answer model
+        out = rounds.submit_answer(session, t[carer], {**ev(300), "dealbreakers": sug}, T0)
+        assert out["stored"] is True
+
+
+def test_household_history_is_closed_aggregate_and_isolated(session):
+    tok, _ = closed_care_household(session)
+    open_next = rounds.revisit_round(session, tok["Maya"], now=T0, mode="everyday")
+    t_open = open_next["participants"][0]["token"]
+    plans = rounds.household_history(session, t_open, T0)["plans"]
+    assert [p["mode"] for p in plans] == ["care"]  # the open round is not listed yet
+    assert plans[0]["title"] == "Care plan" and "needs" in plans[0]["summary"]
+    for t in [p["token"] for p in open_next["participants"]]:
+        rounds.submit_answer(session, t, ev(200, vibe=["foodie"]), T0)
+    plans = rounds.household_history(session, t_open, T0)["plans"]
+    assert [p["mode"] for p in plans] == ["care", "everyday"]
+    assert all(set(p) == {"round_id", "mode", "title", "summary", "at", "checkin"} for p in plans)
+
+    other = rounds.create_round(session, "care", [{"name": "Maya"}, {"name": "Ben"}], 3600, now=T0)
+    assert rounds.household_history(session, other["participants"][0]["token"], T0)["plans"] == []

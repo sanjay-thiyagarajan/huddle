@@ -89,6 +89,12 @@ def plan_card(token: str, s: Session = Depends(_session)):
     return rounds.plan_card(s, token)
 
 
+@app.get("/api/household")
+def household(token: str, s: Session = Depends(_session)):
+    """The household's closed plans so far (aggregate only)."""
+    return rounds.household_history(s, token)
+
+
 @app.get("/me/answers")
 def me_answers(token: str, s: Session = Depends(_session)):
     return rounds.my_answers(s, token)

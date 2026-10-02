@@ -1,7 +1,7 @@
 """Scheduling service: private commitments, conflicts and their resolution, rules, find-a-time."""
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pytest
 

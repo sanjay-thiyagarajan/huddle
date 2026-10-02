@@ -1,9 +1,35 @@
 # Huddle
 
-A private group-decision agent. It asks each person privately (voice at home, a link when remote), computes what is compatible, and proposes one plan with the trade-off explained, without revealing who limited it.
+A private group-decision agent. It asks each person privately (voice at home, a link when remote), computes what is compatible, and proposes one plan with the trade-off explained, without revealing who limited it. It decides; it does not plan or book.
 
-Built for the [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/) (primary track: Alexa+; mini-challenges: AWS Builder, Open Source).
+Built for the [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/) (primary track: Alexa+; mini-challenges: AWS Builder, Open Source). New project, started after Aug 31, 2026.
 
-Status: skeleton only. Full plan: [docs/development-plan.md](docs/development-plan.md).
+**Status:** P0-P3 done (engine, MCP server, care mode, simulator and link flow, mock mode). Not yet built: speaker identification (P4), Bedrock/Strands/AgentCore (P5). See [docs/development-plan.md](docs/development-plan.md).
 
-Privacy note: answers are never shown or attributed. This is no-attribution plus bucketing, not cryptographic secrecy. With two people, the other person may infer your number.
+## Quickstart (mock mode, no AWS credentials)
+
+```
+make install
+make dev     # API + MCP on :8000, simulator on http://localhost:5173
+make test    # includes the privacy leak test
+```
+
+## How it works
+
+- `server/mcp_server.py`: self-hosted MCP server, Streamable HTTP at `/mcp`, protocol 2025-11-25 (official `mcp` SDK, pinned `<2`). Tools: `start_huddle`, `submit_private_answer`, `get_group_result`, `close_round`, `nudge_pending`.
+- The simulator (`web/`) stands in for Alexa+. Its agent calls the MCP server over HTTP at runtime (`/api/agent/tool` proxies to `/mcp`).
+- `server/engine/`: `privacy.py` (buckets, k rule, leak guard), `rounds.py` (lifecycle: collecting, reminded, closed, with defaults for non-responders), `everyday.py`, `care.py` (integer task split via `scipy.optimize.milp`).
+- Private answers are stored server-side and returned only to their owner (`GET /me/answers`).
+- `tests/test_leak.py` seeds distinctive values and calls every REST route and MCP tool as every participant; it fails if another person's value (or their bucket next to their name) appears. `tests/e2e_mock_demo.py` runs a scripted care round against a live server.
+
+## Honest limits
+
+- Answers are never shown or attributed. This is no-attribution plus bucketing, **not cryptographic secrecy**. With two people, the other person can infer your number; the UI says so.
+- Care mode shows assignments, not capacities, but an assignment can hint at what someone can do.
+- The profile switcher stands in for Alexa person recognition. It separates profiles; it is not security.
+- Care mode is a decision aid, not medical, legal or financial advice. It collects no health data.
+- Not yet verified in a real browser; the UI is type-checked and builds, and the API flow is tested.
+
+## Licence
+
+MIT. Third-party components: [THIRD_PARTY.md](THIRD_PARTY.md).

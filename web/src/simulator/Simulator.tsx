@@ -136,7 +136,7 @@ export default function Simulator() {
             <p className="fine">Huddle is asking each person privately. Nobody sees anyone else's answer.</p>
             <ul className="roster">
               {status?.participants.map((p) => (
-                <li key={p.name}>{p.name}<span>{p.channel === "link" ? "by link" : "by voice"}, {p.answered ? "answered" : "waiting"}</span></li>
+                <li key={p.name}>{p.name}<span>{p.channel === "link" ? "by link" : "by voice"}, {p.answered ? "answered" : state === "closed" ? "no answer, default used" : "waiting"}</span></li>
               ))}
             </ul>
             {state === "reminded" && <p className="banner note" role="status">A reminder went out to anyone still waiting.</p>}

@@ -43,6 +43,6 @@ Format per entry: task attempted, steps taken, expected vs actual, severity, wor
 - **Steps taken:** Called `tabs_context_mcp` with `createIfEmpty`.
 - **Expected:** A tab group to drive the app at localhost.
 - **Actual:** "Browser extension is not connected."
-- **Severity:** Medium (UI was verified only by `tsc`, `vite build` and a scripted API round; no visual or interaction check yet).
-- **Workaround:** Scripted end-to-end round in `tests/e2e_mock_demo.py`; Playwright E2E is planned for P7.
+- **Severity:** Medium (blocked the visual check until the extension was connected; resolved later in the session).
+- **Workaround:** Scripted API round in `tests/e2e_mock_demo.py` meanwhile; once the extension connected, the UI was checked by hand in Chrome.
 - **Suggestion:** Have the tool report which of "not installed", "not logged in" or "needs restart" applies.

@@ -28,7 +28,7 @@ make test    # includes the privacy leak test
 - Care mode shows assignments, not capacities, but an assignment can hint at what someone can do.
 - The profile switcher stands in for Alexa person recognition. It separates profiles; it is not security.
 - Care mode is a decision aid, not medical, legal or financial advice. It collects no health data.
-- Not yet verified in a real browser; the UI is type-checked and builds, and the API flow is tested.
+- Checked by hand in Chrome (mock mode): care round via the simulator, spoken-answer parsing, server-holds panel, close with defaults, reveal, and the link page. There is no automated browser test yet (Playwright is planned).
 
 ## Licence
 

@@ -884,7 +884,7 @@ def _headline(report: dict) -> str:
         if report.get("balanced")
         else f"This week's split is {dev:g}% from a fair share at its widest, the fairest the limits allow."
     )
-    if report.get("heavy_chores"):
+    if report.get("heavy_chores") and report.get("rotation_applies"):
         parts.append(f"{report['heavy_rotated']} of {report['heavy_chores']} heavy chores changed hands.")
     if report.get("mental_chores") and report.get("mental_owners", 0) > 1:
         parts.append("Planning and admin tasks are shared.")

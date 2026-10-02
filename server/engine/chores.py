@@ -329,6 +329,8 @@ def _report(chores: list[ChoreIn], assign: dict, last_owner: dict, deviation: fl
         "unstaffed": [c.id for c in chores if len(assign[c.id]) < c.people_needed],
         "heavy_chores": len(heavy),
         "heavy_rotated": len(rotated),
+        # rotation only means something when there was a previous owner to rotate away from
+        "rotation_applies": any(last_owner.get(c.id) for c in heavy),
         "mental_chores": len(mental),
         "mental_owners": len(mental_owners),
     }

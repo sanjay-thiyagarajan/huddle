@@ -154,7 +154,8 @@ def test_a_heavy_chore_rotates_when_someone_else_can_take_it():
     owner1 = first.assign["garage"][0]
     again = ch.plan(chs, ms, last_owner={"garage": {owner1}})
     assert again.assign["garage"][0] != owner1
-    assert again.report["heavy_rotated"] == 1
+    assert again.report["heavy_rotated"] == 1 and again.report["rotation_applies"] is True
+    assert first.report["rotation_applies"] is False  # nothing to rotate away from in the first week
 
 
 def test_rotation_never_overrides_a_hard_limit():

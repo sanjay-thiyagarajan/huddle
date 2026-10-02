@@ -44,7 +44,7 @@ async function parse<T>(res: Response): Promise<T> {
   return body as T;
 }
 
-const post = (url: string, body: unknown) =>
+export const post = (url: string, body: unknown) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 /** The simulator's agent talks to Huddle's MCP server (Streamable HTTP) through this proxy. */

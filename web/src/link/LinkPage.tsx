@@ -11,6 +11,7 @@ export default function LinkPage({ token }: { token: string }) {
   const [result, setResult] = useState<Result | null>(null);
   const [checkin, setCheckin] = useState<CheckinSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -45,12 +46,19 @@ export default function LinkPage({ token }: { token: string }) {
       )}
       {result ? (
         <>
-          <Reveal result={result} onExplain={() => api.explain(token)} />
+          <Reveal result={result} onExplain={() => api.explain(token)} onCard={() => api.planCard(token)} />
           <Checkin name={status.me.name} summary={checkin} done={status.events.some((e) => e.kind === "checked_in" && e.actor === status.me.name)}
             onSubmit={async (score) => { await api.checkin(token, score); await refresh(); }} />
         </>
       )
-        : status.me.answered ? <p className="banner note" role="status">Saved. Waiting for the others. This page updates by itself.</p>
+        : editing ? <AnswerForm mode={status.mode} token={token} name={status.me.name} initial={editing}
+            onSubmit={async (a) => { await api.submit(token, a); setEditing(null); await refresh(); }} />
+        : status.me.answered ? (
+          <>
+            <p className="banner note" role="status">Saved. Waiting for the others. This page updates by itself. You can change your answer until everyone has answered.</p>
+            <button className="ghost" onClick={() => void api.myAnswers(token).then((r) => setEditing(r.answer))}>Change my answer</button>
+          </>
+        )
         : status.state === "closed" ? <p className="banner note">This round has closed.</p>
         : <AnswerForm mode={status.mode} token={token} name={status.me.name}
             onSubmit={async (a) => { await api.submit(token, a); await refresh(); }} />}

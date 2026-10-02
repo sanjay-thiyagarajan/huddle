@@ -1,11 +1,37 @@
 import { useState } from "react";
-import type { Explanation, Result } from "../api";
+import type { Explanation, PlanCard, Result } from "../api";
 
 /** Group result: aggregate only. Never shows anyone's answer or who set a limit. */
-export default function Reveal({ result, onExplain }: { result: Result; onExplain?: () => Promise<Explanation> }) {
+export default function Reveal({ result, onExplain, onCard }: {
+  result: Result; onExplain?: () => Promise<Explanation>; onCard?: () => Promise<PlanCard>;
+}) {
   const care = result.mode === "care";
   const [explained, setExplained] = useState<Explanation | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [speaking, setSpeaking] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  async function readAloud() {
+    if (!onCard) return;
+    if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }
+    try {
+      const card = await onCard();
+      const u = new SpeechSynthesisUtterance(card.text);
+      u.onend = () => setSpeaking(false);
+      u.onerror = () => setSpeaking(false);
+      setSpeaking(true);
+      window.speechSynthesis.speak(u);
+    } catch (e) { setError((e as Error).message); }
+  }
+  async function copyCard() {
+    if (!onCard) return;
+    try {
+      await navigator.clipboard.writeText((await onCard()).text);
+      setCopied(true);
+    } catch (e) { setError((e as Error).message); }
+  }
+
   const heading = care ? "Here's a care plan that fits everyone"
     : result.mode === "trip" ? "Here's a trip that works for the group" : "Here's the plan";
   return (
@@ -21,6 +47,13 @@ export default function Reveal({ result, onExplain }: { result: Result; onExplai
 
       {care ? <Care r={result} /> : <Everyday r={result} />}
 
+      {onCard && (
+        <div className="explain row">
+          {canSpeak && <button className="ghost" aria-pressed={speaking} onClick={() => void readAloud()}>{speaking ? "Stop reading" : "Read it aloud"}</button>}
+          <button className="ghost" onClick={() => void copyCard()}>{copied ? "Plan card copied" : "Copy plan card"}</button>
+          <button className="ghost" onClick={() => window.print()}>Print</button>
+        </div>
+      )}
       {onExplain && (
         <div className="explain">
           <button className="ghost" onClick={() => { setError(null); onExplain().then(setExplained).catch((e: Error) => setError(e.message)); }}>
@@ -73,6 +106,14 @@ function Care({ r }: { r: Result }) {
       </div>
       <h3>Ways to close the gap</h3>
       <ul className="options">{r.options.map((o: string) => <li key={o}>{o}</li>)}</ul>
+      {r.fairness && (
+        <div className="fairness">
+          <h3>Fair share over time</h3>
+          <p>Heavy tasks (overnight cover, appointments and transport) so far, across {r.fairness.plans} plans:{" "}
+            {Object.entries(r.fairness.heavy_hours as Record<string, number>).map(([n, h]) => `${n} ${h} h`).join(", ")}.</p>
+          <p className="fine">{r.fairness.note}</p>
+        </div>
+      )}
       <p className="banner note">{r.assignment_caveat}</p>
     </>
   );

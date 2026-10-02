@@ -20,6 +20,7 @@ export interface Draft {
   draft: Record<string, unknown>; missing: string[]; followup: string | null;
   engine: string; latency_ms: number; engine_error?: string;
 }
+export interface PlanCard { title: string; text: string; markdown: string }
 export interface Explanation { text: string; engine: string; latency_ms: number }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Result = Record<string, any>;
@@ -47,6 +48,9 @@ export const api = {
   result: (token: string) =>
     fetch(`/api/result?token=${encodeURIComponent(token)}`)
       .then((r) => parse<{ ready: boolean; result?: Result; checkin?: CheckinSummary }>(r)),
+  myAnswers: (token: string) =>
+    fetch(`/me/answers?token=${encodeURIComponent(token)}`).then((r) => parse<{ answered: boolean; answer: Record<string, unknown> | null }>(r)),
+  planCard: (token: string) => fetch(`/api/plan-card?token=${encodeURIComponent(token)}`).then((r) => parse<PlanCard>(r)),
   explain: (token: string) => fetch(`/api/agent/explain?token=${encodeURIComponent(token)}`).then((r) => parse<Explanation>(r)),
   checkin: (token: string, score: number) =>
     post("/api/checkin", { token, score }).then((r) => parse<{ stored: boolean; summary: CheckinSummary }>(r)),

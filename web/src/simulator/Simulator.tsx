@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import AnswerForm from "../AnswerForm";
 import Checkin from "../Checkin";
-import { api, listen, speechSupported, TASK_TYPES, tool } from "../api";
+import NeedEditor, { DEFAULT_TASKS, needPayload } from "../NeedEditor";
+import type { TaskDraft } from "../NeedEditor";
+import { api, listen, speechSupported, tool } from "../api";
 import type { Channel, CheckinSummary, Holds, Mode, Person, Result, Status } from "../api";
 import Reveal from "../reveal/Reveal";
 import { ENROL_PHRASES, enrolVoice, identifyVoice, recordWav } from "../voice";
@@ -22,15 +24,6 @@ const MODE_LABEL: Record<Mode, string> = {
 const guessMode = (t: string): Mode =>
   /\b(care|mum|mom|dad|parent|mother|father|grand)/i.test(t) ? "care"
     : /\b(trip|travel|vacation|getaway|holiday)\b/i.test(t) ? "trip" : "everyday";
-
-interface TaskDraft { label: string; type: string; hours: number }
-const DEFAULT_TASKS: TaskDraft[] = [
-  { label: "Daily check-in", type: "checkin", hours: 7 },
-  { label: "Appointments and transport", type: "appointments", hours: 6 },
-  { label: "Meals", type: "meals", hours: 8 },
-  { label: "Finances and paperwork", type: "finances", hours: 3 },
-  { label: "Overnight cover", type: "overnight", hours: 6 },
-];
 
 function Ring({ active, label }: { active: boolean; label: string }) {
   return <div className={`ring${active ? " on" : ""}`} role="img" aria-label={label}><span /></div>;
@@ -54,6 +47,8 @@ export default function Simulator() {
   const [error, setError] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [voiceMsg, setVoiceMsg] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
+  const [revisitBusy, setRevisitBusy] = useState(false);
 
   const host = round?.find((p) => p.is_host);
 
@@ -67,10 +62,7 @@ export default function Simulator() {
   async function start() {
     setError(null);
     try {
-      const need = mode === "care" ? {
-        tasks: tasks.map((t, i) => ({ id: `t${i}_${t.type}`, label: t.label, type: t.type, hours: Number(t.hours) })),
-        dollars_per_month: Number(dollars),
-      } : undefined;
+      const need = mode === "care" ? needPayload(tasks, dollars) : undefined;
       const out = await tool<{ participants: Person[] }>("start_huddle", {
         mode, participants: people.filter((p) => p.name.trim()), deadline_seconds: demoClock ? 45 : 3600, need,
       });
@@ -128,13 +120,29 @@ export default function Simulator() {
       } else setVoiceMsg("Not sure who that was. Pick a profile below.");
     } catch (e) { setVoiceMsg((e as Error).message); }
   }
+  async function revisit() {
+    if (!host) return;
+    setRevisitBusy(true);
+    try {
+      const out = await tool<{ participants: Person[] }>("revisit_round", {
+        token: host.token, need: mode === "care" ? needPayload(tasks, dollars) : undefined,
+        deadline_seconds: demoClock ? 45 : 3600,
+      });
+      setRound(out.participants); setActive(out.participants[0].name);
+      setStatus(null); setResult(null); setCheckin(null); setHolds(null); setEditing(null);
+      setNote("A new round is open for the same people. Everyone answers again from scratch.");
+    } catch (e) { setError((e as Error).message); } finally { setRevisitBusy(false); }
+  }
+  async function change(p: Person) {
+    const mine = await api.myAnswers(p.token);
+    setEditing(mine.answer);
+  }
   function reset() { setRound(null); setStatus(null); setResult(null); setCheckin(null); setHolds(null); setNote(null); }
 
   const person = round?.find((p) => p.name === active);
   const answered = (n: string) => status?.participants.find((p) => p.name === n)?.answered ?? false;
   const checkedIn = (n: string) => status?.events.some((e) => e.kind === "checked_in" && e.actor === n) ?? false;
   const state = status?.state;
-  const setTask = (i: number, patch: Partial<TaskDraft>) => setTasks(tasks.map((t, j) => (j === i ? { ...t, ...patch } : t)));
 
   return (
     <div className="shell">
@@ -161,28 +169,7 @@ export default function Simulator() {
               ))}
             </div>
             {mode === "care" && (
-              <details className="need-editor">
-                <summary>What the care plan needs ({tasks.reduce((n, t) => n + Number(t.hours || 0), 0)} h/week, ${dollars}/month)</summary>
-                <p className="fine">Everyone can see this part. Only the amounts people can give stay private.</p>
-                {tasks.map((t, i) => (
-                  <div className="task-row" key={i}>
-                    <input aria-label={`Task ${i + 1} name`} value={t.label} onChange={(e) => setTask(i, { label: e.target.value })} />
-                    <select aria-label={`Task ${i + 1} type`} value={t.type} onChange={(e) => setTask(i, { type: e.target.value })}>
-                      {TASK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                    </select>
-                    <input aria-label={`Task ${i + 1} hours per week`} type="number" min={1} max={80} value={t.hours}
-                      onChange={(e) => setTask(i, { hours: Number(e.target.value) })} />
-                  </div>
-                ))}
-                <div className="row">
-                  {tasks.length < 20 && <button type="button" className="ghost" onClick={() => setTasks([...tasks, { label: "New task", type: "checkin", hours: 1 }])}>Add a task</button>}
-                  {tasks.length > 1 && <button type="button" className="ghost" onClick={() => setTasks(tasks.slice(0, -1))}>Remove last</button>}
-                </div>
-                <label>Money needed per month (dollars)
-                  <input type="number" min={0} value={dollars} onChange={(e) => setDollars(Number(e.target.value))} />
-                </label>
-                <p className="fine">Decision aid, not medical, legal or financial advice. Don't enter health details.</p>
-              </details>
+              <NeedEditor tasks={tasks} dollars={dollars} onTasks={setTasks} onDollars={setDollars} summary="What the care plan needs" />
             )}
             <fieldset className="people">
               <legend>Who's in the huddle</legend>
@@ -267,11 +254,12 @@ export default function Simulator() {
 
         {round && result && (
           <>
-            <Reveal result={result} onExplain={host ? () => api.explain(host.token) : undefined} />
+            <Reveal result={result} onExplain={host ? () => api.explain(host.token) : undefined}
+              onCard={host ? () => api.planCard(host.token) : undefined} />
             <div className="recognized" role="group" aria-label="Who is checking in">
               <div className="modes">
                 {round.map((p) => (
-                  <button key={p.name} className="chip" aria-pressed={p.name === active} onClick={() => setActive(p.name)}>{p.name}</button>
+                  <button key={p.name} className="chip" aria-pressed={p.name === active} onClick={() => { setActive(p.name); setEditing(null); }}>{p.name}</button>
                 ))}
               </div>
             </div>
@@ -281,6 +269,16 @@ export default function Simulator() {
               <Checkin name={person?.name ?? ""} summary={checkin} done={person ? checkedIn(person.name) : false}
                 onSubmit={async (score) => { await tool("submit_checkin", { token: person!.token, score }); void refresh(); }} />
             ))}
+            {host && (
+              <section className="nextround" aria-labelledby="next-h">
+                <h3 id="next-h">{checkin?.revisit ? "Someone isn't comfortable. Try another round?" : "Plan the next round for this group"}</h3>
+                <p className="fine">Same people, answering again from scratch. Nothing private carries over.{mode === "care" ? " Adjust the care need first if it changed. Heavy tasks are rotated using past assignments only." : ""}</p>
+                {mode === "care" && (
+                  <NeedEditor tasks={tasks} dollars={dollars} onTasks={setTasks} onDollars={setDollars} summary="Care need for the next round" />
+                )}
+                <button className={checkin?.revisit ? "primary" : "ghost"} disabled={revisitBusy} onClick={() => void revisit()}>Start the next round</button>
+              </section>
+            )}
           </>
         )}
 
@@ -292,14 +290,23 @@ export default function Simulator() {
               <button className="ghost" onClick={() => void whoIsSpeaking()}>Who's speaking? Listen</button>
               <div className="modes">
                 {round.map((p) => (
-                  <button key={p.name} className="chip" aria-pressed={p.name === active} onClick={() => setActive(p.name)}>
+                  <button key={p.name} className="chip" aria-pressed={p.name === active} onClick={() => { setActive(p.name); setEditing(null); }}>
                     {p.name}{answered(p.name) ? " (done)" : ""}
                   </button>
                 ))}
               </div>
             </div>
-            {person && (answered(person.name) ? (
-              <p className="banner note" role="status">{person.name}'s answer is saved. It stays on the server and is not shown here.</p>
+            {person && (editing && person.channel === "voice" ? (
+              <AnswerForm key={`${person.token}-edit`} mode={mode} token={person.token} name={person.name} initial={editing}
+                onSubmit={async (answer) => {
+                  await tool("submit_private_answer", { token: person.token, answer });
+                  setEditing(null); void refresh();
+                }} />
+            ) : answered(person.name) ? (
+              <>
+                <p className="banner note" role="status">{person.name}'s answer is saved. It stays on the server and is not shown here. It can be changed until everyone has answered.</p>
+                {person.channel === "voice" && <button className="ghost" onClick={() => void change(person)}>Change my answer</button>}
+              </>
             ) : person.channel === "link" ? (
               <div className="linkbox">
                 <p>{person.name} answers on their own phone. Send them this private link:</p>

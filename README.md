@@ -23,6 +23,9 @@ Those figures are sourced facts about caregiving. **Our claim that families stal
 3. **Proposes one plan and explains the trade-off** ("Picked X; some of you preferred Y, but the budget ruled it out") without naming anyone.
 4. **Handles people who don't answer**: a reminder, then a stated default, so the group isn't stuck.
 5. **Checks in the day after**: each person privately rates how the plan sits with them; the group sees only an unattributed summary.
+6. **Lets people change their mind**: an answer can be revised until the round closes. The group sees that something was revised, never who.
+7. **Plans the next round**: if someone isn't comfortable (or a month later), the host opens a follow-up round for the same people. Everyone answers from scratch and nothing private carries over. In care mode a **fair-share record** counts heavy tasks (overnight cover, appointments) across rounds from past assignments only, and the next split rotates them where limits allow.
+8. **Hands over a plan card**: a copyable, printable summary that the assistant can also read aloud. It is built only from the aggregate result.
 
 | Mode | Each person privately gives | Output |
 |---|---|---|
@@ -52,7 +55,7 @@ flowchart LR
   Agent -.->|aws mode| Bedrock[Strands agent on Amazon Bedrock<br/>not yet run]
 ```
 
-- `server/mcp_server.py`: self-hosted MCP server, Streamable HTTP at `/mcp`. Tools: `start_huddle`, `submit_private_answer`, `get_group_result`, `close_round`, `nudge_pending`, `submit_checkin`. Uses the official `mcp` SDK (pinned `<2`).
+- `server/mcp_server.py`: self-hosted MCP server, Streamable HTTP at `/mcp`. Tools: `start_huddle`, `submit_private_answer`, `get_group_result`, `close_round`, `nudge_pending`, `submit_checkin`, `revisit_round`. Uses the official `mcp` SDK (pinned `<2`).
 - The simulator (`web/`, Vite + React) stands in for Alexa+. Its agent calls the MCP server over HTTP at runtime (`/api/agent/tool` proxies to `/mcp`).
 - `server/engine/`: `privacy.py` (bands, k rule, leak guard), `rounds.py` (lifecycle, check-in, audit trail), `everyday.py`, `trip.py`, `care.py` (integer task split with `scipy.optimize.milp`).
 - Private answers are stored server-side and returned only to their owner (`GET /me/answers`). The audit trail records who did what and when, never what anyone answered.
@@ -82,8 +85,8 @@ Optional extras: `pip install '.[voice]'` (speaker ID and Whisper), `pip install
 
 | Area | State |
 |---|---|
-| MCP server, privacy engine, three modes, check-in, audit trail | Built; 60 automated tests including the leak test |
-| Simulator and private link flow | Built; 8 browser tests (demo flows, failure path, phone width, accessibility in light and dark, microphone path) |
+| MCP server, privacy engine, three modes, check-in, revision, next round and fair-share record, plan card, audit trail | Built; 68 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
+| Simulator and private link flow | Built; 11 browser tests (demo flows, failure path, each feature, phone width, accessibility in light and dark, microphone path) |
 | Voice ID and Whisper | Built; measured on synthetic voices only |
 | Strands agent on Bedrock, AgentCore hosting | Code and notes written, **never run against AWS** |
 | Real-group user test | **Not run** |

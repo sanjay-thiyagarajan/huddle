@@ -46,7 +46,7 @@ test("care round: voice, remote link and reveal, with no value leaking into othe
   for (const p of [page, phone]) {
     await expect(p.getByRole("heading", { name: /care plan that fits everyone/ })).toBeVisible({ timeout: 10_000 });
     await expect(p.getByText(/never shown or attributed/)).toBeVisible();
-    await expect(p.getByText("Decision aid, not medical, legal or financial advice.").last()).toBeVisible();
+    await expect(p.locator(".reveal").getByText("Decision aid, not medical, legal or financial advice.")).toBeVisible();
     await expect(p.getByText(/hint at what a person is able to do/)).toBeVisible();
     expect(await p.locator("body").innerText()).not.toContain("613");
   }

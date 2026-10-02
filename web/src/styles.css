@@ -86,3 +86,10 @@ button, .ghost { font: inherit; cursor: pointer; border-radius: 8px; padding: .5
 .need-editor { margin-bottom: 1rem; } .need-editor summary { cursor: pointer; font-weight: 600; margin-bottom: .5rem; }
 .task-row { display: grid; grid-template-columns: 1.4fr 1.2fr .6fr; gap: .4rem; margin-bottom: .4rem; }
 a:not(.ghost) { color: var(--lagoon); text-underline-offset: 3px; }
+.fairness { border-top: 1px solid var(--line); margin-top: 1rem; }
+.nextround { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+@media print {
+  body { background: #fff; color: #000; }
+  .device, .recognized, .checkin, .nextround, .explain, button, .ghost { display: none !important; }
+  .shell { display: block; } .stage { padding: 0; max-width: none; }
+}

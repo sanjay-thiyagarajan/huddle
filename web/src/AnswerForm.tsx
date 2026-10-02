@@ -25,13 +25,14 @@ function Chips({ options, value, onChange, label }: {
 }
 
 /** One person's private answer: say it or fill it in, check it, then save. */
-export default function AnswerForm({ mode, token, name, onSubmit }: {
-  mode: Mode; token: string; name: string;
+export default function AnswerForm({ mode, token, name, onSubmit, initial }: {
+  mode: Mode; token: string; name: string; initial?: Record<string, unknown>;
   onSubmit: (answer: Record<string, unknown>) => Promise<unknown>;
 }) {
-  const [draft, setDraft] = useState<Draft>(blank(mode));
+  const start = (): Draft => (initial ? Object.fromEntries(Object.entries(initial).map(([k, v]) => [k, typeof v === "number" ? String(v) : v])) : blank(mode));
+  const [draft, setDraft] = useState<Draft>(start);
   const [said, setSaid] = useState("");
-  const [consent, setConsent] = useState(false);
+  const [consent, setConsent] = useState(Boolean(initial)); // already agreed when revising
   const [followup, setFollowup] = useState<string | null>(null);
   const [engine, setEngine] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,7 +40,7 @@ export default function AnswerForm({ mode, token, name, onSubmit }: {
   const [listening, setListening] = useState(false);
   const stop = useRef<(() => void) | null>(null);
 
-  useEffect(() => { setDraft(blank(mode)); setSaid(""); setConsent(false); setFollowup(null); setEngine(null); setError(null); }, [token, mode]);
+  useEffect(() => { setDraft(start()); setSaid(""); setConsent(Boolean(initial)); setFollowup(null); setEngine(null); setError(null); }, [token, mode]);
 
   const set = (k: string, v: unknown) => setDraft((d) => ({ ...d, [k]: v }));
   const list = (k: string) => (draft[k] as string[]) ?? [];
@@ -120,7 +121,7 @@ export default function AnswerForm({ mode, token, name, onSubmit }: {
         <span>I'm an adult and I agree to answer. Others never see my answer, and it is never attributed to me.</span>
       </label>
       {error && <p className="error" role="alert">{error}</p>}
-      <button className="primary" disabled={!consent || busy}>{busy ? "Saving" : "Save my private answer"}</button>
+      <button className="primary" disabled={!consent || busy}>{busy ? "Saving" : initial ? "Update my private answer" : "Save my private answer"}</button>
     </form>
   );
 }

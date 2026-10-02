@@ -85,3 +85,105 @@ test("phone width: no horizontal scroll and no accessibility violations", async 
   expect(await overflow()).toBeLessThanOrEqual(0);
   expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
 });
+
+// ---- change answer, revisit + fairness, plan card ----------------------------------------------
+
+async function careAnswer(p: Page, hours: string, dollars: string, ...chips: string[]) {
+  await p.getByLabel("Hours per week you can give").fill(hours);
+  await p.getByLabel("Dollars per month you can put in").fill(dollars);
+  for (const c of chips) await p.getByRole("button", { name: c }).click();
+  await consent(p); await save(p);
+}
+
+test("change my answer until the round closes; the audit trail shows a revision without a name", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start the huddle" }).click();
+  await page.getByLabel(/Most you'd spend per person/).fill("100");
+  await consent(page); await save(page);
+  await expect(page.getByText("Maya's answer is saved")).toBeVisible();
+
+  await page.getByRole("button", { name: "Change my answer" }).click();
+  await expect(page.getByLabel(/Most you'd spend per person/)).toHaveValue("100"); // prefilled with their own answer
+  await page.getByLabel(/Most you'd spend per person/).fill("300");
+  await page.getByRole("button", { name: "Update my private answer" }).click();
+  await expect(page.getByText("Maya's answer is saved")).toBeVisible();
+  await page.getByRole("button", { name: "Change my answer" }).click();
+  await expect(page.getByLabel(/Most you'd spend per person/)).toHaveValue("300");
+
+  // Switching profile must not carry Maya's draft into Ben's panel
+  await page.getByRole("button", { name: /^Ben/ }).click();
+  await expect(page.getByLabel(/Most you'd spend per person/)).toHaveValue("");
+  await page.getByText("What happened so far").click();
+  const trail = await page.getByRole("list", { name: "Audit trail" }).innerText();
+  expect(trail).toMatch(/revised/);
+  expect(trail).not.toMatch(/revised, /); // no actor is attached to a revision
+  expect(trail).not.toMatch(/\b(100|300)\b/);
+});
+
+test("next round keeps the group, starts fresh, and shows the fair-share record", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Sharing care for a parent" }).click();
+  await page.getByLabel("How Chen answers").selectOption("voice"); // answer all three at the device
+  await page.getByRole("button", { name: "Start the huddle" }).click();
+
+  const round = async (a: [string, string], b: [string, string], c: [string, string]) => {
+    await careAnswer(page, a[0], a[1], "Overnight cover");
+    await page.getByRole("button", { name: /^Ben/ }).click();
+    await careAnswer(page, b[0], b[1]);
+    await page.getByRole("button", { name: /^Chen/ }).click();
+    await careAnswer(page, c[0], c[1]);
+  };
+  await round(["12", "600"], ["8", "500"], ["6", "400"]);
+  await expect(page.getByRole("heading", { name: /care plan that fits everyone/ })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Fair share over time")).toHaveCount(0); // no history yet
+
+  await page.getByRole("button", { name: "Start the next round" }).click();
+  await expect(page.getByText(/A new round is open for the same people/)).toBeVisible();
+  await expect(page.getByLabel("Hours per week you can give")).toHaveValue(""); // nothing carried over
+  await round(["12", "600"], ["8", "500"], ["6", "400"]);
+  await expect(page.getByText("Fair share over time")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/across 2 plans/)).toBeVisible();
+  await expect(page.getByText(/never anyone's private limits/)).toBeVisible();
+});
+
+test("plan card: copy, read aloud and print contain only the aggregate", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.addInitScript(() => { // deterministic speech: record what would be spoken
+    const spoken: string[] = [];
+    (window as unknown as { __spoken: string[] }).__spoken = spoken;
+    Object.defineProperty(window, "speechSynthesis", {
+      value: { speak: (u: { text: string }) => spoken.push(u.text), cancel: () => undefined }, configurable: true,
+    });
+    (window as unknown as { SpeechSynthesisUtterance: unknown }).SpeechSynthesisUtterance = class { text: string; onend = null; onerror = null; constructor(t: string) { this.text = t; } };
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Sharing care for a parent" }).click();
+  await page.getByLabel("How Chen answers").selectOption("voice");
+  await page.getByRole("button", { name: "Start the huddle" }).click();
+  await careAnswer(page, "13.5", "437", "Overnight cover");
+  await page.getByRole("button", { name: /^Ben/ }).click();
+  await careAnswer(page, "17.5", "613");
+  await page.getByRole("button", { name: /^Chen/ }).click();
+  await careAnswer(page, "11.5", "829");
+  await expect(page.getByRole("heading", { name: /care plan that fits everyone/ })).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole("button", { name: "Copy plan card" }).click();
+  await expect(page.getByRole("button", { name: "Plan card copied" })).toBeVisible();
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clip).toContain("Care plan");
+  expect(clip).toContain("not medical, legal or financial advice");
+  for (const secret of ["13.5", "17.5", "11.5", "437", "613", "829"]) expect(clip).not.toContain(secret);
+
+  await page.getByRole("button", { name: "Read it aloud" }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __spoken: string[] }).__spoken.length)).toBe(1);
+  const spoken = await page.evaluate(() => (window as unknown as { __spoken: string[] }).__spoken[0]);
+  expect(spoken).toContain("Care plan");
+  for (const secret of ["13.5", "437", "613"]) expect(spoken).not.toContain(secret);
+
+  await page.emulateMedia({ media: "print" }); // print view hides the controls and the device column
+  await expect(page.getByRole("button", { name: "Copy plan card" })).toBeHidden();
+  await expect(page.locator(".device")).toBeHidden();
+  await expect(page.getByRole("heading", { name: /care plan that fits everyone/ })).toBeVisible();
+  await page.emulateMedia({ media: "screen" });
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
+});

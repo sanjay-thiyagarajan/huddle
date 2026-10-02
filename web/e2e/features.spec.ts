@@ -6,7 +6,7 @@ const consent = (p: Page) => p.getByRole("checkbox", { name: /I'm an adult/ }).c
 const save = (p: Page) => p.getByRole("button", { name: "Save my private answer" }).click();
 
 test("care need editor changes what the plan needs", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Share care for a parent" }).click();
   await page.getByText(/What the care plan needs/).click();
   await page.getByLabel("Task 3 hours per week").fill("2"); // meals 8 -> 2: total 24
@@ -17,7 +17,7 @@ test("care need editor changes what the plan needs", async ({ page }) => {
 });
 
 test("trip round: remote link, reveal, explain, check-in summary and audit trail", async ({ page, context }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Plan a trip" }).click();
   await page.getByRole("button", { name: "Start the huddle" }).click();
 
@@ -74,7 +74,7 @@ test("trip round: remote link, reveal, explain, check-in summary and audit trail
 
 test("phone width: no horizontal scroll and no accessibility violations", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Share care for a parent" }).click();
   await page.getByText(/What the care plan needs/).click();
   const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -96,7 +96,7 @@ async function careAnswer(p: Page, hours: string, dollars: string, ...chips: str
 }
 
 test("change my answer until the round closes; the audit trail shows a revision without a name", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Plan a weekend" }).click();
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByLabel(/Most you'd spend per person/).fill("100");
@@ -122,7 +122,7 @@ test("change my answer until the round closes; the audit trail shows a revision 
 });
 
 test("next round keeps the group, starts fresh, and shows the fair-share record", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Share care for a parent" }).click();
   await page.getByLabel("How Chen answers").selectOption("voice"); // answer all three at the device
   await page.getByRole("button", { name: "Start the huddle" }).click();
@@ -157,7 +157,7 @@ test("plan card: copy, read aloud and print contain only the aggregate", async (
     });
     (window as unknown as { SpeechSynthesisUtterance: unknown }).SpeechSynthesisUtterance = class { text: string; onend = null; onerror = null; constructor(t: string) { this.text = t; } };
   });
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Share care for a parent" }).click();
   await page.getByLabel("How Chen answers").selectOption("voice");
   await page.getByRole("button", { name: "Start the huddle" }).click();
@@ -190,7 +190,7 @@ test("plan card: copy, read aloud and print contain only the aggregate", async (
 });
 
 test("one household: care plan, then a weekend for the same family with a private care-load hint", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByLabel("How Chen answers").selectOption("voice");
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await expect(page.locator(".hint")).toHaveCount(0); // no hints inside the care round itself
@@ -235,7 +235,7 @@ test("one household: care plan, then a weekend for the same family with a privat
 });
 
 test("care plan: the group sees who owns what with no hours; each person sees only their own", async ({ page, context }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Start the huddle" }).click(); // Maya, Ben by voice; Chen by link
   await careAnswer(page, "12", "600");
   await page.getByRole("button", { name: /^Ben/ }).click();

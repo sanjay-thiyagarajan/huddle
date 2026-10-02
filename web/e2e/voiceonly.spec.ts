@@ -18,7 +18,7 @@ test("voice-only: private by default, never echoes a value, hands off to phone o
     (window as unknown as { SpeechSynthesisUtterance: unknown }).SpeechSynthesisUtterance =
       class { text: string; constructor(t: string) { this.text = t; } };
   });
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByLabel("How Chen answers").selectOption("voice");
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByLabel("Voice-only mode (like a speaker with no screen)").check();
@@ -77,7 +77,7 @@ test("voice-only: private by default, never echoes a value, hands off to phone o
 });
 
 test("voice-only view has no accessibility violations and honours read-back only on request", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Plan a weekend" }).click();
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByLabel("Voice-only mode (like a speaker with no screen)").check();

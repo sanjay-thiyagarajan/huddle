@@ -14,7 +14,7 @@ test.use({
 });
 
 test("enrol Maya from the mic, then recognise her", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByText("Voice recognition setup").click();
   await page.getByRole("button", { name: "Enrol Maya" }).click();

@@ -5,7 +5,7 @@ import type { Page } from "@playwright/test";
 const wcag = (p: Page) => new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa"]).analyze();
 
 async function createAndPlan(page: Page) {
-  await page.goto("/?tab=chores");
+  await page.goto("/?tab=home");
   await page.getByRole("button", { name: "Create the household" }).click();
   await page.getByRole("button", { name: "Add a starter set of chores" }).click();
   await page.getByRole("button", { name: "Plan the week" }).click();
@@ -158,7 +158,7 @@ test("handing a chore back asks someone else, and the household survives a reloa
 test("household pages have no accessibility violations in light and dark, and fit a phone", async ({ page }) => {
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await page.goto("/?tab=chores");
+    await page.goto("/?tab=home");
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     expect((await wcag(page)).violations, `setup ${scheme}`).toEqual([]);

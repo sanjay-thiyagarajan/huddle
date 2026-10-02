@@ -32,6 +32,11 @@ export interface HomeReport {
   deviation_pct?: number; balanced?: boolean; slots_filled?: number; slots_total?: number; unstaffed?: string[];
   heavy_chores?: number; heavy_rotated?: number; mental_chores?: number; mental_owners?: number; exempt_count?: number;
 }
+export interface HomeDecision {
+  round_id: string; mode: "care" | "everyday" | "trip"; title: string; state: "collecting" | "reminded" | "closed";
+  deadline_at: string; answered: boolean; answered_count: number; of: number; token: string; link: string; created: string;
+}
+export interface HomePlanSummary { round_id: string; mode: string; title: string; summary: string; at: string; checkin: string | null }
 export interface HomeState {
   home: { name: string; week: string; week_end: string };
   me: { name: string; is_admin: boolean };
@@ -40,8 +45,10 @@ export interface HomeState {
   plan: { exists: boolean; assignments: HomeAssignment[]; loads_minutes: Record<string, number>; report: HomeReport; headline: string; attention: string[] };
   mine: {
     assignments: HomeAssignment[]; proposals: { id: number; title: string; minutes: number; category: string }[];
-    profile: HomeProfile; load: { minutes: number; availability: number; vs_fair_share_pct: number | null }; nudges: string[];
+    profile: HomeProfile; load: { minutes: number; availability: number; care_minutes: number; vs_fair_share_pct: number | null };
+    nudges: string[]; decisions: HomeDecision[];
   };
+  plans_so_far: HomePlanSummary[];
   events: { at: string; kind: string; actor: string | null; detail: string | null }[];
 }
 export interface HomeMember { name: string; is_admin: boolean; token: string; link: string }
@@ -65,6 +72,8 @@ export const homeApi = {
   handBack: (token: string, assignment_id: number, reason?: string) =>
     post("/api/home/handback", { token, assignment_id, reason }).then((r) => parse<HomeState>(r)),
   complete: (token: string, assignment_id: number) => post("/api/home/complete", { token, assignment_id }).then((r) => parse<HomeState>(r)),
+  decision: (token: string, mode: string, need?: unknown) =>
+    post("/api/home/decision", { token, mode, need }).then((r) => parse<{ round_id: string; my_link: string }>(r)),
   checkin: (token: string, score: number) => post("/api/home/checkin", { token, score }).then((r) => parse<{ stored: boolean }>(r)),
   say: (token: string, utterance: string) => post("/api/home/say", { token, utterance }).then((r) => parse<SayResult>(r)),
 };

@@ -40,7 +40,7 @@ export function ProfilePanel({ token, profile, onSaved }: { token: string; profi
     <section className="home-panel" aria-labelledby="profile-h">
       <h3 id="profile-h">Your private limits</h3>
       <p className="fine">Only you can see these. The group sees who owns each chore, never why.</p>
-      <label>Hours of chores you can take this week
+      <label>Hours of chores you can take this week (care you've taken on counts here)
         <input type="number" min={0} max={40} step={0.5} value={hours} onChange={(e) => setHours(e.target.value)} />
       </label>
       <label className="consent">
@@ -92,7 +92,7 @@ export function MyWeek({ token, st, onChange }: { token: string; st: HomeState; 
   const [felt, setFelt] = useState<number | null>(null);
   const run = async (f: () => Promise<HomeState>) => { setError(null); try { onChange(await f()); } catch (e) { setError((e as Error).message); } };
   const pct = st.mine.load.vs_fair_share_pct;
-  const used = st.mine.load.availability ? Math.round((st.mine.load.minutes / st.mine.load.availability) * 100) : 0;
+  const used = st.mine.load.availability ? Math.round(((st.mine.load.minutes + st.mine.load.care_minutes) / st.mine.load.availability) * 100) : 0;
 
   return (
     <section className="home-panel" aria-labelledby="week-h">
@@ -132,7 +132,7 @@ export function MyWeek({ token, st, onChange }: { token: string; st: HomeState; 
         </ul>
       )}
       <p className="fine">
-        You have {fmtMin(st.mine.load.minutes)} of {fmtMin(st.mine.load.availability)} you offered ({used}%).
+        You have {fmtMin(st.mine.load.minutes)} of chores{st.mine.load.care_minutes > 0 ? ` and about ${fmtMin(st.mine.load.care_minutes)} of care you've taken on` : ""}, against the {fmtMin(st.mine.load.availability)} you offered ({used}%).
         {pct !== null && ` That is ${Math.abs(pct)}% ${pct >= 0 ? "above" : "below"} your fair share.`}
       </p>
       <fieldset className="chips" aria-label="How did this week feel?">

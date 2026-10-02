@@ -10,7 +10,7 @@ async function audit(page: import("@playwright/test").Page, label: string) {
 for (const scheme of ["light", "dark"] as const) {
   test(`accessibility (${scheme}): start, answer, reveal, link page`, async ({ page, context }) => {
     await page.emulateMedia({ colorScheme: scheme });
-    await page.goto("/");
+    await page.goto("/?tab=decisions");
     await audit(page, "start screen");
 
     await page.getByRole("button", { name: "Share care for a parent" }).click();

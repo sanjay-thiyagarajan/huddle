@@ -22,7 +22,7 @@ async function openChen(page: Page, context: import("@playwright/test").BrowserC
 }
 
 test("host nudge: honest delivery results, reminder banner and notification on Chen's page, rate limit", async ({ page, context }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByLabel("Email for reminders for Chen (optional)").fill("chen.sentinel@example.test");
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByRole("button", { name: /^Chen/ }).click();
@@ -61,7 +61,7 @@ test("host nudge: honest delivery results, reminder banner and notification on C
 });
 
 test("scheduler sends the first reminder by itself, with nobody clicking anything", async ({ page, context }) => {
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByLabel(/Short 45-second deadline/).check();
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByRole("button", { name: /^Chen/ }).click();
@@ -81,7 +81,7 @@ test("share invite uses the device share sheet with no private values", async ({
     (window as unknown as { __shared: unknown[] }).__shared = shared;
     Object.defineProperty(navigator, "share", { value: (d: unknown) => { shared.push(d); return Promise.resolve(); }, configurable: true });
   });
-  await page.goto("/");
+  await page.goto("/?tab=decisions");
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByRole("button", { name: /^Chen/ }).click();
   await page.getByRole("button", { name: "Share invite" }).click();

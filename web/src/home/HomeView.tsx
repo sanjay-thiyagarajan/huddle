@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { MyDecisions, StartDecision } from "./Decisions";
 import { Activity, AgentBox, ChoreBoard, FairnessCard, MyWeek, ProfilePanel } from "./Panels";
 import { homeApi } from "./homeApi";
 import type { HomeState } from "./homeApi";
@@ -29,11 +30,13 @@ export default function HomeView({ token, sharedScreen }: { token: string; share
         )}
         <ProfilePanel token={token} profile={st.mine.profile} onSaved={() => void refresh()} />
         <MyWeek token={token} st={st} onChange={setSt} />
+        <MyDecisions st={st} onChanged={() => void refresh()} />
         <AgentBox token={token} onChanged={() => void refresh()} />
       </div>
       <div className="home-shared">
         <ChoreBoard token={token} st={st} onChange={setSt} />
         <FairnessCard st={st} />
+        <StartDecision token={token} st={st} onStarted={() => void refresh()} />
         <Activity st={st} />
       </div>
     </div>

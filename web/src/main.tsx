@@ -6,16 +6,16 @@ import LinkPage from "./link/LinkPage";
 import Simulator from "./simulator/Simulator";
 import "./styles.css";
 
-type Tab = "decisions" | "chores";
+type Tab = "decisions" | "home";
 
 function Shell() {
-  const [tab, setTab] = useState<Tab>(new URLSearchParams(window.location.search).get("tab") === "chores" ? "chores" : "decisions");
+  const [tab, setTab] = useState<Tab>(["decisions"].includes(new URLSearchParams(window.location.search).get("tab") ?? "") ? "decisions" : "home");
   return (
     <>
       <nav className="tabs" aria-label="Huddle">
         <span className="brand">Huddle</span>
-        <button className="tab" aria-pressed={tab === "decisions"} onClick={() => setTab("decisions")}>Family decisions</button>
-        <button className="tab" aria-pressed={tab === "chores"} onClick={() => setTab("chores")}>Household chores</button>
+        <button className="tab" aria-pressed={tab === "home"} onClick={() => setTab("home")}>Home</button>
+        <button className="tab" aria-pressed={tab === "decisions"} onClick={() => setTab("decisions")}>Try a decision</button>
       </nav>
       {tab === "decisions" ? <Simulator /> : <HomeApp />}
     </>

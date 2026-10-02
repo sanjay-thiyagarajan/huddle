@@ -56,6 +56,22 @@ class Checkin(SQLModel, table=True):
     created_at: NaiveDatetime
 
 
+class RoundHousehold(SQLModel, table=True):
+    """Links rounds into a household chain. The id is random and only inherited via revisit."""
+    round_id: str = Field(primary_key=True)
+    household_id: str = Field(index=True)
+
+
+class HouseholdLoad(SQLModel, table=True):
+    """Public assignment history for the fairness record (never private limits)."""
+    id: int | None = Field(default=None, primary_key=True)
+    household_id: str = Field(index=True)
+    round_id: str
+    person_name: str
+    heavy_hours: int
+    total_hours: int
+
+
 class VoiceProfile(SQLModel, table=True):
     """Biometric stand-in data: enrolment embeddings per household profile (never raw audio)."""
     name: str = Field(primary_key=True)

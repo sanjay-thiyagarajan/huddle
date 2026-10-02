@@ -13,8 +13,8 @@ from pydantic import ValidationError
 from sqlmodel import Session, select
 
 from .. import config
-from ..db import Answer, Checkin, Event, Participant, Round
-from . import care, everyday, privacy, trip
+from ..db import Answer, Checkin, Event, HouseholdLoad, Participant, Round, RoundHousehold
+from . import card, care, everyday, privacy, trip
 
 MODES = {"everyday": everyday, "care": care, "trip": trip}
 CHANNELS = ("voice", "link")
@@ -87,7 +87,8 @@ def _log(s: Session, round_id: str, kind: str, now: datetime, actor: str | None 
 # ---- lifecycle --------------------------------------------------------------------------------
 
 def create_round(s: Session, mode: str, participants: list[dict], deadline_seconds: int = 3600,
-                 need: dict | None = None, now: datetime | None = None) -> dict:
+                 need: dict | None = None, now: datetime | None = None,
+                 household_id: str | None = None, detail: str | None = None) -> dict:
     now = now or now_utc()
     m = _mode(mode)
     if not 2 <= len(participants) <= 6:
@@ -117,7 +118,8 @@ def create_round(s: Session, mode: str, participants: list[dict], deadline_secon
         token = make_token(part.id, deadline + timedelta(days=1))
         out.append({"name": name, "channel": part.channel, "is_host": part.is_host,
                     "token": token, "link": f"/r/{token}"})
-    _log(s, rnd.id, "opened", now, actor=names[0], detail=f"{len(names)} people, {mode}")
+    s.add(RoundHousehold(round_id=rnd.id, household_id=household_id or secrets.token_hex(6)))
+    _log(s, rnd.id, "opened", now, actor=names[0], detail=detail or f"{len(names)} people, {mode}")
     s.commit()
     return {"round_id": rnd.id, "mode": mode, "deadline_at": deadline.isoformat(),
             "participants": out}
@@ -152,7 +154,10 @@ def _close(s: Session, rnd: Round, now: datetime | None = None) -> Round:
             answers[p.id] = Answer(participant_id=p.id, round_id=rnd.id, data=dflt)
             defaulted = True
     ordered = [(p.name, answers[p.id].data) for p in parts]
-    rnd.result = m.compute(ordered, rnd.need, defaults_applied=defaulted)
+    kwargs = {"history": _history(s, rnd)} if rnd.mode == "care" else {}
+    rnd.result = m.compute(ordered, rnd.need, defaults_applied=defaulted, **kwargs)
+    if rnd.mode == "care":
+        _record_loads(s, rnd)
     rnd.defaults_applied = defaulted
     rnd.state = "closed"
     s.add(rnd)
@@ -162,14 +167,38 @@ def _close(s: Session, rnd: Round, now: datetime | None = None) -> Round:
     return rnd
 
 
+def _household(s: Session, round_id: str) -> str:
+    link = s.get(RoundHousehold, round_id)
+    return link.household_id if link else round_id
+
+
+def _history(s: Session, rnd: Round) -> dict:
+    """Heavy-task hours from EARLIER rounds in this household chain (public assignments only)."""
+    hh = _household(s, rnd.id)
+    rows = [r for r in s.exec(select(HouseholdLoad).where(HouseholdLoad.household_id == hh))
+            if r.round_id != rnd.id]
+    heavy: dict[str, int] = {}
+    for r in rows:
+        heavy[r.person_name.lower()] = heavy.get(r.person_name.lower(), 0) + r.heavy_hours
+    return {"rounds": len({r.round_id for r in rows}), "heavy": heavy}
+
+
+def _record_loads(s: Session, rnd: Round) -> None:
+    hh = _household(s, rnd.id)
+    heavy = rnd.result.get("heavy_hours_this_plan", {})
+    totals = {a["name"]: sum(t["hours"] for t in a["tasks"]) for a in rnd.result["assignments"]}
+    for name in heavy:
+        s.add(HouseholdLoad(household_id=hh, round_id=rnd.id, person_name=name,
+                            heavy_hours=heavy[name], total_hours=totals.get(name, 0)))
+
+
 def submit_answer(s: Session, token: str, payload: dict, now: datetime | None = None) -> dict:
     now = now or now_utc()
     p, rnd = _auth(s, token, now)
     rnd = advance(s, rnd, now)
     if rnd.state == "closed":
         raise HuddleError("round_closed", "This round is closed.", 409)
-    if s.get(Answer, p.id) is not None:
-        raise HuddleError("already_answered", "You already answered. Answers are single-use.", 409)
+    existing = s.get(Answer, p.id)
     payload = dict(payload)
     if payload.pop("consent", False) is not True:
         raise HuddleError("consent_required", "Every participant must opt in (consent: true).")
@@ -181,12 +210,19 @@ def submit_answer(s: Session, token: str, payload: dict, now: datetime | None = 
     except ValidationError as e:
         msgs = "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors())
         raise HuddleError("invalid_answer", msgs) from None
-    s.add(Answer(participant_id=p.id, round_id=rnd.id, data=data, created_at=now))
-    _log(s, rnd.id, "answered", now, actor=p.name)
+    revised = existing is not None
+    if revised:
+        existing.data, existing.created_at = data, now
+        s.add(existing)
+        _log(s, rnd.id, "revised", now)  # deliberately no actor: the group never learns who changed
+    else:
+        s.add(Answer(participant_id=p.id, round_id=rnd.id, data=data, created_at=now))
+        _log(s, rnd.id, "answered", now, actor=p.name)
     s.commit()
     if len(_answers(s, rnd.id)) == len(_participants(s, rnd.id)):
         _close(s, rnd, now)
-    return {"stored": True, "round_state": s.get(Round, rnd.id).state, "warnings": warnings}
+    return {"stored": True, "revised": revised, "round_state": s.get(Round, rnd.id).state,
+            "warnings": warnings}
 
 
 def my_answers(s: Session, token: str, now: datetime | None = None) -> dict:
@@ -248,6 +284,33 @@ def get_result(s: Session, token: str, now: datetime | None = None) -> dict:
         return {"ready": False, "state": rnd.state}
     return {"ready": True, "state": "closed", "result": rnd.result,
             "checkin": _checkin_summary(s, rnd)}
+
+
+def revisit_round(s: Session, token: str, need: dict | None = None, deadline_seconds: int = 3600,
+                  now: datetime | None = None) -> dict:
+    """Host only, after a round closes: open a follow-up round for the same people.
+
+    Nothing private carries over: everyone answers again from scratch. The new round joins the same
+    household chain, so the fairness record can rotate heavy tasks. Returns fresh tokens.
+    """
+    now = now or now_utc()
+    p, rnd = _auth(s, token, now)
+    rnd = advance(s, rnd, now)
+    if not p.is_host:
+        raise HuddleError("host_only", "Only the host can start the next round.", 403)
+    if rnd.state != "closed":
+        raise HuddleError("not_closed", "Finish this round before starting the next one.", 409)
+    people = [{"name": q.name, "channel": q.channel} for q in _participants(s, rnd.id)]
+    return create_round(s, rnd.mode, people, deadline_seconds, need or rnd.need, now,
+                        household_id=_household(s, rnd.id), detail=f"follow-up to round {rnd.id}")
+
+
+def plan_card(s: Session, token: str, now: datetime | None = None) -> dict:
+    """Copyable, printable, speakable summary of the closed round (aggregate only)."""
+    out = get_result(s, token, now)
+    if not out["ready"]:
+        raise HuddleError("not_ready", "The round is still open.", 409)
+    return card.build_card(out["result"], out.get("checkin"))
 
 
 def submit_checkin(s: Session, token: str, score: int, now: datetime | None = None) -> dict:

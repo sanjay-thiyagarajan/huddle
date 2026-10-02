@@ -23,7 +23,7 @@ from . import prompts
 log = logging.getLogger("huddle.agent")
 
 TOOLS = {"start_huddle", "submit_private_answer", "get_group_result", "close_round", "nudge_pending",
-         "submit_checkin"}
+         "submit_checkin", "revisit_round"}
 
 
 def mcp_url() -> str:

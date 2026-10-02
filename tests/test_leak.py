@@ -22,12 +22,13 @@ BUCKETS = {n: [privacy.money_bucket(EVERYDAY[n]), privacy.hours_bucket(CARE_HOUR
 # Routes/tools exercised below; the meta-test fails if a new one is added without coverage.
 COVERED_ROUTES = {"/api/health", "/api/rounds", "/api/status", "/api/answers", "/me/answers",
                   "/api/result", "/api/close", "/api/nudge", "/api/server-holds",
-                  "/api/agent/tool", "/api/agent/parse", "/api/agent/explain", "/api/checkin"}
+                  "/api/agent/tool", "/api/agent/parse", "/api/agent/explain", "/api/checkin",
+                  "/api/plan-card"}
 # Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
 VOICE_ROUTES = {"/api/voice/enrol", "/api/voice/identify", "/api/voice/transcribe",
                 "/api/voice/profiles", "/api/voice/profiles/{name}"}
 COVERED_TOOLS = {"start_huddle", "submit_private_answer", "get_group_result", "close_round",
-                 "nudge_pending", "submit_checkin"}
+                 "nudge_pending", "submit_checkin", "revisit_round"}
 
 
 def _answer(v):
@@ -96,7 +97,7 @@ async def test_leak_rest_every_route_every_participant(fresh_db, mode, make_answ
             assert resp.status_code == 200, resp.text
             _check("checkin", resp.text, name)
         for viewer, tok in toks.items():
-            for path in ("/api/status", "/api/result"):
+            for path in ("/api/status", "/api/result", "/api/plan-card"):
                 body = (await c.get(path, params={"token": tok})).text
                 _check(f"after checkin {path}", body, viewer)
                 assert "score" not in body, f"{path} exposes a score field"
@@ -135,6 +136,10 @@ async def test_leak_mcp_every_tool_every_participant(live_server):
                 out = await call("get_group_result", {"token": tok}, viewer, "closed")
                 assert out.structuredContent["ready"] is True
                 await call("close_round", {"token": tok}, viewer, "closed")
+            denied = await sess.call_tool("revisit_round", {"token": toks["Ben"]})
+            assert denied.isError  # host only
+            nxt = await call("revisit_round", {"token": toks["Maya"]}, "Maya", "closed")
+            assert nxt.structuredContent["round_id"] != res.structuredContent["round_id"]
 
 
 async def test_leak_agent_routes(live_server):
@@ -160,3 +165,35 @@ async def test_leak_agent_routes(live_server):
             _check("agent explain", resp.text, viewer)
         bad = await c.post("/api/agent/tool", json={"name": "dump_db", "arguments": {}})
         assert bad.status_code == 400
+
+
+async def test_leak_two_round_care_chain_and_fairness(session):
+    """Fairness history, revisit, plan card and status across two rounds never expose a private value."""
+    from datetime import datetime
+
+    from server.engine import rounds
+
+    t0 = datetime(2026, 10, 10, 9, 0, 0)
+    people = [{"name": n} for n in EVERYDAY]
+
+    def run_round(first_round):
+        r = first_round
+        toks = {p["name"]: p["token"] for p in r["participants"]}
+        for name, tok in toks.items():
+            rounds.submit_answer(session, tok, _care_answer(name), t0)
+        return toks
+
+    first = rounds.create_round(session, "care", people, 3600, now=t0)
+    toks1 = run_round(first)
+    second = rounds.revisit_round(session, toks1["Maya"], now=t0)
+    toks2 = run_round(second)
+    for toks in (toks1, toks2):
+        for viewer, tok in toks.items():
+            for fn in (rounds.status, rounds.get_result, rounds.plan_card, rounds.my_answers):
+                body = json.dumps(fn(session, tok, t0), default=str)
+                if fn is rounds.my_answers:
+                    assert str(CARE_HOURS[viewer]) in body  # owner sees own
+                    continue
+                _check(f"chain {fn.__name__}", body, viewer)
+    result = rounds.get_result(session, toks2["Ben"], t0)["result"]
+    assert result["fairness"] and result["fairness"]["plans"] == 2

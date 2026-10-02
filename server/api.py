@@ -84,6 +84,11 @@ def checkin(body: CheckinIn, s: Session = Depends(_session)):
     return rounds.submit_checkin(s, body.token, body.score)
 
 
+@app.get("/api/plan-card")
+def plan_card(token: str, s: Session = Depends(_session)):
+    return rounds.plan_card(s, token)
+
+
 @app.get("/me/answers")
 def me_answers(token: str, s: Session = Depends(_session)):
     return rounds.my_answers(s, token)

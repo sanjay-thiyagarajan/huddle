@@ -71,3 +71,10 @@ def submit_checkin(token: str, score: int) -> dict[str, Any]:
     """Day-after check-in once the round is closed: how comfortable are you with the plan (1-5)?
     Private and single-use. The group only ever sees an unattributed summary."""
     return _run(rounds.submit_checkin, token, score)
+
+
+@mcp.tool()
+def revisit_round(token: str, need: dict | None = None, deadline_seconds: int = 3600) -> dict[str, Any]:
+    """Host only, after a round closes: open a follow-up round for the same people. Nothing private
+    carries over; everyone answers again. Returns fresh tokens, like start_huddle."""
+    return _run(rounds.revisit_round, token, need, deadline_seconds)

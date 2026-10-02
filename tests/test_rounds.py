@@ -42,7 +42,7 @@ def test_lifecycle_remind_then_defaults_at_deadline(session):
     assert res["state"] == "closed" and res["result"]["defaults_applied"] is True
 
 
-def test_single_use_consent_and_validation(session):
+def test_consent_validation_and_revision_until_close(session):
     t = tokens(rounds.create_round(session, "everyday", PEOPLE, 3600, now=T0))
     with pytest.raises(rounds.HuddleError) as e:
         rounds.submit_answer(session, t["Maya"], {**answer(100), "consent": False}, T0)
@@ -50,10 +50,24 @@ def test_single_use_consent_and_validation(session):
     with pytest.raises(rounds.HuddleError) as e:
         rounds.submit_answer(session, t["Maya"], answer(-5), T0)
     assert e.value.code == "invalid_answer"
-    rounds.submit_answer(session, t["Maya"], answer(100), T0)
+
+    first = rounds.submit_answer(session, t["Maya"], answer(100), T0)
+    assert first["revised"] is False
+    second = rounds.submit_answer(session, t["Maya"], answer(250, vibe=["foodie"]), T0)
+    assert second["revised"] is True and second["round_state"] == "collecting"
+    mine = rounds.my_answers(session, t["Maya"], T0)["answer"]
+    assert mine["budget_ceiling"] == 250 and mine["vibe"] == ["foodie"]  # owner sees the latest
+
+    events = rounds.status(session, t["Ben"], T0)["events"]
+    revised = [e for e in events if e["kind"] == "revised"]
+    assert len(revised) == 1 and revised[0]["actor"] is None  # the group never learns who changed
+    assert [e["actor"] for e in events if e["kind"] == "answered"] == ["Maya"]
+
+    rounds.submit_answer(session, t["Ben"], answer(300), T0)
+    rounds.submit_answer(session, t["Chen"], answer(300), T0)  # closes the round
     with pytest.raises(rounds.HuddleError) as e:
-        rounds.submit_answer(session, t["Maya"], answer(100), T0)
-    assert e.value.code == "already_answered"
+        rounds.submit_answer(session, t["Maya"], answer(50), T0)
+    assert e.value.code == "round_closed"
 
 
 def test_tokens_forged_expired_and_host_only(session):

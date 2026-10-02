@@ -27,6 +27,11 @@ BLOCKS: dict[str, set[str]] = {
     "far_away": {"overnight", "appointments", "meals"},
 }
 
+# Task types that are physically demanding or tie someone to a place and time. The fairness record
+# counts these so the next split can rotate them.
+HEAVY_TYPES = {"overnight", "appointments"}
+FAIRNESS_WEIGHT = 0.0005  # small: rotation breaks ties and never costs coverage
+
 DEFAULT_NEED = {
     "tasks": [
         {"id": "checkin", "label": "Daily check-in", "type": "checkin", "hours": 7},
@@ -95,9 +100,12 @@ def _blocked(answer: dict) -> set[str]:
     return set().union(*(BLOCKS[d] for d in answer["dealbreakers"])) if answer["dealbreakers"] else set()
 
 
-def solve(tasks: list[dict], answers: list[dict]) -> list[dict[str, int]]:
+def solve(tasks: list[dict], answers: list[dict],
+          prior_heavy: list[int] | None = None) -> list[dict[str, int]]:
     """Integer-hour split. Stage 1 maximises hours covered; stage 2 spreads load evenly
     (minimises the largest share of anyone's own capacity). Returns, per person, {task_id: hours}.
+    `prior_heavy` is each person's heavy-task hours from earlier rounds (public assignments only);
+    among otherwise equal splits, heavy tasks go to whoever has taken fewer.
     """
     P, T = len(answers), len(tasks)
     caps = [int(math.floor(a["hours_per_week"])) for a in answers]
@@ -146,7 +154,15 @@ def solve(tasks: list[dict], answers: list[dict]) -> list[dict[str, int]]:
     cons = [LinearConstraint(A, -np.inf, np.array(hi)), LinearConstraint(cover, covered, np.inf)]
     if extra:
         cons.append(LinearConstraint(np.array(extra), -np.inf, np.array(extra_hi)))
-    r2 = milp(np.r_[np.zeros(n), 1], constraints=cons, integrality=integrality, bounds=bounds)
+    c2 = np.zeros(n + 1)
+    c2[n] = 1
+    top = max(prior_heavy or [0])
+    if top > 0:
+        for p in range(P):
+            for t, task in enumerate(tasks):
+                if task["type"] in HEAVY_TYPES:
+                    c2[idx(p, t)] = FAIRNESS_WEIGHT * prior_heavy[p] / top
+    r2 = milp(c2, constraints=cons, integrality=integrality, bounds=bounds)
     x = (r2 if r2.success else r1).x
 
     return [{tasks[t]["id"]: int(round(x[idx(p, t)])) for t in range(T) if round(x[idx(p, t)]) > 0}
@@ -157,7 +173,8 @@ def _money_label(amount: float) -> str:
     return f"${amount:,.0f}"
 
 
-def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied: bool = False) -> dict:
+def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied: bool = False,
+            history: dict | None = None) -> dict:
     names = [n for n, _ in named_answers]
     answers = [a for _, a in named_answers]
     n = len(answers)
@@ -165,7 +182,9 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
     tasks = need["tasks"]
     by_id = {t["id"]: t for t in tasks}
 
-    split = solve(tasks, answers)
+    prior = history or {"rounds": 0, "heavy": {}}
+    prior_heavy = [prior["heavy"].get(nm.lower(), 0) for nm in names]
+    split = solve(tasks, answers, prior_heavy)
     assigned_by_task = {t["id"]: sum(s.get(t["id"], 0) for s in split) for t in tasks}
     need_hours = sum(t["hours"] for t in tasks)
     covered_hours = sum(assigned_by_task.values())
@@ -197,6 +216,18 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
     if not options:
         options.append("The plan is covered. Review it together in a few weeks.")
 
+    heavy_now = {names[p]: sum(h for tid, h in split[p].items() if by_id[tid]["type"] in HEAVY_TYPES)
+                 for p in range(n)}
+    fairness = None
+    if prior["rounds"] > 0:
+        fairness = {
+            "plans": prior["rounds"] + 1,
+            "heavy_hours": {nm: prior_heavy[i] + heavy_now[nm] for i, nm in enumerate(names)},
+            "note": ("Heavy tasks (overnight cover, appointments and transport) are counted across plans for "
+                     "this group. This split gave them to whoever had taken fewer, where limits allowed. "
+                     "Based on past assignments only, never anyone's private limits."),
+        }
+
     headline = (
         f"The plan needs {need_hours} h/week and {_money_label(need['dollars_per_month'])}/month. "
         f"After fitting everyone's private limits, the gap is {privacy.gap_label_hours(gap_hours)} "
@@ -211,6 +242,8 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
         "assignments": assignments,
         "unfilled_tasks": unfilled,
         "options": options,
+        "fairness": fairness,
+        "heavy_hours_this_plan": heavy_now,
         "assignment_caveat": ASSIGNMENT_CAVEAT,
         "disclaimer": DISCLAIMER,
         "group_size": n,

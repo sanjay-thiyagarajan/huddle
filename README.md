@@ -4,7 +4,7 @@ A private group-decision agent. It asks each person privately (voice at home, a 
 
 Built for the [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/) (primary track: Alexa+; mini-challenges: AWS Builder, Open Source). New project, started after Aug 31, 2026.
 
-**Status:** P0-P3 done (engine, MCP server, care mode, simulator and link flow, mock mode). Not yet built: speaker identification (P4), Bedrock/Strands/AgentCore (P5). See [docs/development-plan.md](docs/development-plan.md).
+**Status:** P0-P3 done, plus the P7 items that need no outside input (Playwright E2E, accessibility audit, Docker) (engine, MCP server, care mode, simulator and link flow, mock mode). Not yet built: speaker identification (P4), Bedrock/Strands/AgentCore (P5). See [docs/development-plan.md](docs/development-plan.md).
 
 ## Quickstart (mock mode, no AWS credentials)
 
@@ -12,6 +12,8 @@ Built for the [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/
 make install
 make dev     # API + MCP on :8000, simulator on http://localhost:5173
 make test    # includes the privacy leak test
+make e2e     # Playwright (needs Google Chrome): demo flows, failure path, axe a11y audit
+make docker  # or: docker compose up --build  -> http://localhost:8000
 ```
 
 ## How it works
@@ -28,7 +30,7 @@ make test    # includes the privacy leak test
 - Care mode shows assignments, not capacities, but an assignment can hint at what someone can do.
 - The profile switcher stands in for Alexa person recognition. It separates profiles; it is not security.
 - Care mode is a decision aid, not medical, legal or financial advice. It collects no health data.
-- Checked by hand in Chrome (mock mode): care round via the simulator, spoken-answer parsing, server-holds panel, close with defaults, reveal, and the link page. There is no automated browser test yet (Playwright is planned).
+- Checked by hand in Chrome (mock mode): care round via the simulator, spoken-answer parsing, server-holds panel, close with defaults, reveal, and the link page. Playwright E2E (`make e2e`) now automates the care round with a remote link, the reminder-then-defaults path, DOM checks that no other person's value appears, and an axe WCAG A/AA audit in light and dark.
 
 ## Licence
 

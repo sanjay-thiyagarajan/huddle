@@ -1,4 +1,4 @@
-.PHONY: install dev test lint build
+.PHONY: install dev test lint build e2e docker
 PY := .venv/bin
 
 install:
@@ -20,6 +20,13 @@ build:
 
 test:
 	HUDDLE_MODE=mock $(PY)/pytest -q
+
+# Browser tests (Playwright + installed Chrome): demo flows, failure path, axe accessibility audit
+e2e:
+	cd web && npx playwright test
+
+docker:
+	docker compose up --build   # http://localhost:8000, mock mode
 
 lint:
 	$(PY)/ruff check server tests

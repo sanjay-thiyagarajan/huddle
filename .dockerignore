@@ -1,0 +1,8 @@
+node_modules
+web/node_modules
+web/dist
+.venv
+.git
+*.db
+test-results
+__pycache__

@@ -1,0 +1,12 @@
+services:
+  huddle:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports: ["8000:8000"]
+    environment:
+      HUDDLE_MODE: mock
+      HUDDLE_SECRET: ${HUDDLE_SECRET:-dev-only-change-me}
+    volumes: ["huddle-data:/data"]
+volumes:
+  huddle-data:

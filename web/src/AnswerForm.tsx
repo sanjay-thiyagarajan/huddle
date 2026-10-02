@@ -94,7 +94,7 @@ export default function AnswerForm({ mode, token, name, onSubmit }: {
                 value={String(draft.hours_per_week ?? "")} onChange={(e) => set("hours_per_week", e.target.value)} />
             </label>
             <label>Dollars per month you can put in
-              <input type="number" min={0} step={10} inputMode="numeric" required
+              <input type="number" min={0} step={1} inputMode="numeric" required
                 value={String(draft.dollars_per_month ?? "")} onChange={(e) => set("dollars_per_month", e.target.value)} />
             </label>
           </div>
@@ -103,7 +103,7 @@ export default function AnswerForm({ mode, token, name, onSubmit }: {
       ) : (
         <>
           <label>Most you'd spend per person (dollars)
-            <input type="number" min={0} step={5} inputMode="numeric" required
+            <input type="number" min={0} step={1} inputMode="numeric" required
               value={String(draft.budget_ceiling ?? "")} onChange={(e) => set("budget_ceiling", e.target.value)} />
           </label>
           <Chips label="What you'd enjoy" options={EVERYDAY_VIBES} value={list("vibe")} onChange={(v) => set("vibe", v)} />

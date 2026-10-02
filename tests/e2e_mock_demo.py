@@ -32,7 +32,8 @@ print(c.post("/api/answers", json={"token": tok["Chen"], "answer": {
     "consent": True, "hours_per_week": 6, "dollars_per_month": 400, "dealbreakers": ["transport"]}}).json())
 
 res = tool("get_group_result", token=tok["Maya"])["result"]
-print(json.dumps({k: res[k] for k in ("headline", "gap_hours_bucket", "gap_dollars_bucket", "warnings")}, indent=1))
+keys = ("headline", "gap_hours_bucket", "gap_dollars_bucket", "warnings")
+print(json.dumps({k: res[k] for k in keys}, indent=1))
 for a in res["assignments"]:
     print(" ", a["name"], [(t["label"], t["hours"]) for t in a["tasks"]])
 assert res["gap_hours_bucket"] == "0-5 h" and res["gap_dollars_bucket"] == "$250-500"

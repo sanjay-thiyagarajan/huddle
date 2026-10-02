@@ -4,7 +4,7 @@ import Checkin from "../Checkin";
 import NeedEditor, { DEFAULT_TASKS, needPayload } from "../NeedEditor";
 import type { TaskDraft } from "../NeedEditor";
 import { api, listen, speechSupported, tool } from "../api";
-import type { Channel, CheckinSummary, Holds, Mode, Person, Result, Status } from "../api";
+import type { Channel, CheckinSummary, Hint, Holds, HouseholdPlan, Mode, Person, Result, Status } from "../api";
 import Reveal from "../reveal/Reveal";
 import { ENROL_PHRASES, enrolVoice, identifyVoice, recordWav } from "../voice";
 
@@ -19,7 +19,10 @@ const WAKE: Record<Mode, string> = {
   trip: "Alexa, help us pick a trip",
 };
 const MODE_LABEL: Record<Mode, string> = {
-  everyday: "A weekend plan", care: "Sharing care for a parent", trip: "A trip with friends",
+  care: "Share care for a parent", everyday: "Plan a weekend", trip: "Plan a trip",
+};
+const NEXT_LABEL: Record<Mode, string> = {
+  care: "Share care again", everyday: "Plan a weekend", trip: "Plan a trip",
 };
 const guessMode = (t: string): Mode =>
   /\b(care|mum|mom|dad|parent|mother|father|grand)/i.test(t) ? "care"
@@ -30,9 +33,9 @@ function Ring({ active, label }: { active: boolean; label: string }) {
 }
 
 export default function Simulator() {
-  const [utterance, setUtterance] = useState(WAKE.everyday);
-  const [mode, setMode] = useState<Mode>("everyday");
-  const [people, setPeople] = useState(PRESETS.everyday);
+  const [utterance, setUtterance] = useState(WAKE.care);
+  const [mode, setMode] = useState<Mode>("care");
+  const [people, setPeople] = useState(PRESETS.care);
   const [tasks, setTasks] = useState<TaskDraft[]>(DEFAULT_TASKS);
   const [dollars, setDollars] = useState(1800);
   const [demoClock, setDemoClock] = useState(false);
@@ -49,6 +52,8 @@ export default function Simulator() {
   const [voiceMsg, setVoiceMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [revisitBusy, setRevisitBusy] = useState(false);
+  const [hints, setHints] = useState<Hint[]>([]);
+  const [plans, setPlans] = useState<HouseholdPlan[]>([]);
 
   const host = round?.find((p) => p.is_host);
 
@@ -66,7 +71,7 @@ export default function Simulator() {
       const out = await tool<{ participants: Person[] }>("start_huddle", {
         mode, participants: people.filter((p) => p.name.trim()), deadline_seconds: demoClock ? 45 : 3600, need,
       });
-      setRound(out.participants); setActive(out.participants[0].name); setResult(null); setCheckin(null); setNote(null);
+      setRound(out.participants); setActive(out.participants[0].name); setResult(null); setCheckin(null); setNote(null); setPlans([]);
     } catch (e) { setError((e as Error).message); }
   }
 
@@ -89,6 +94,20 @@ export default function Simulator() {
     const id = setInterval(() => void refresh(), 2000);
     return () => clearInterval(id);
   }, [round, refresh]);
+
+  // Optional private hint for whoever is at the device: from their own public care assignment only.
+  useEffect(() => {
+    const person = round?.find((p) => p.name === active);
+    if (!person || result) { setHints([]); return; }
+    let live = true;
+    api.status(person.token).then((s) => { if (live) setHints(s.hints); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [round, active, result]);
+
+  useEffect(() => {
+    if (!host || !result) return;
+    api.household(host.token).then((h) => setPlans(h.plans)).catch(() => undefined);
+  }, [host, result]);
 
   async function nudge() {
     if (!host) return;
@@ -120,24 +139,26 @@ export default function Simulator() {
       } else setVoiceMsg("Not sure who that was. Pick a profile below.");
     } catch (e) { setVoiceMsg((e as Error).message); }
   }
-  async function revisit() {
+  async function revisit(next: Mode = mode) {
     if (!host) return;
     setRevisitBusy(true);
     try {
       const out = await tool<{ participants: Person[] }>("revisit_round", {
-        token: host.token, need: mode === "care" ? needPayload(tasks, dollars) : undefined,
+        token: host.token, mode: next, need: next === "care" ? needPayload(tasks, dollars) : undefined,
         deadline_seconds: demoClock ? 45 : 3600,
       });
+      setMode(next); setUtterance(WAKE[next]);
       setRound(out.participants); setActive(out.participants[0].name);
       setStatus(null); setResult(null); setCheckin(null); setHolds(null); setEditing(null);
-      setNote("A new round is open for the same people. Everyone answers again from scratch.");
+      setNote(next === mode ? "A new round is open for the same people. Everyone answers again from scratch."
+        : "The next decision is open for the same family. Everyone answers from scratch.");
     } catch (e) { setError((e as Error).message); } finally { setRevisitBusy(false); }
   }
   async function change(p: Person) {
     const mine = await api.myAnswers(p.token);
     setEditing(mine.answer);
   }
-  function reset() { setRound(null); setStatus(null); setResult(null); setCheckin(null); setHolds(null); setNote(null); }
+  function reset() { setPlans([]); setRound(null); setStatus(null); setResult(null); setCheckin(null); setHolds(null); setNote(null); }
 
   const person = round?.find((p) => p.name === active);
   const answered = (n: string) => status?.participants.find((p) => p.name === n)?.answered ?? false;
@@ -152,7 +173,7 @@ export default function Simulator() {
         {!round ? (
           <form className="wake" onSubmit={(e) => { e.preventDefault(); void start(); }}>
             <label>
-              <span className="big">What should we sort out?</span>
+              <span className="big">What does the family need to decide?</span>
               <input value={utterance} onChange={(e) => changeUtterance(e.target.value)} />
             </label>
             {speechSupported() && (
@@ -162,7 +183,7 @@ export default function Simulator() {
               </button>
             )}
             <div className="modes" role="group" aria-label="Kind of decision">
-              {(["everyday", "care", "trip"] as Mode[]).map((m) => (
+              {(["care", "everyday", "trip"] as Mode[]).map((m) => (
                 <button type="button" key={m} className="chip" aria-pressed={mode === m} onClick={() => chooseMode(m)}>
                   {MODE_LABEL[m]}
                 </button>
@@ -227,6 +248,14 @@ export default function Simulator() {
                 ))}
               </ul>
             </details>
+            {plans.length > 0 && (
+              <details className="voicebox" open>
+                <summary>Family plans so far</summary>
+                <ul className="audit" aria-label="Family plans so far">
+                  {plans.map((p) => <li key={p.round_id}><strong>{p.title}:</strong> {p.summary}{p.checkin ? ` (${p.checkin})` : ""}</li>)}
+                </ul>
+              </details>
+            )}
             <details className="voicebox">
               <summary>Voice recognition setup</summary>
               <p className="fine">Optional stand-in for Alexa person recognition. It separates profiles and is not security. Only a voice fingerprint is kept, not the recording.</p>
@@ -246,8 +275,9 @@ export default function Simulator() {
         {!round && (
           <section className="intro">
             <h1>Huddle</h1>
-            <p className="lede">Some group decisions stall because nobody wants to say their real number out loud. Huddle asks each person privately and proposes one plan.</p>
-            <p>Say three siblings are sharing a parent's care. One can give 12 hours a week but not nights. One lives far away and can send money. One can only drive on weekdays. Nobody wants to be the person whose limit decides the plan. Huddle collects each limit privately, works out what fits everyone, and shows the group a plan and the trade-off, without saying who set which limit.</p>
+            <p className="lede">Some decisions stall because nobody wants to say their real number out loud. Huddle asks each person privately and proposes one plan.</p>
+            <p>It's built for a family's decisions, hard and easy, with one way of working. Take three siblings sharing a parent's care: one can give 12 hours a week but not nights, one lives far away and can send money, one can only drive on weekdays. Nobody wants their limit to be the one that decides. Huddle collects each limit privately, works out what fits everyone, and shows a plan and the trade-off without saying who set which limit.</p>
+            <p>Then the same family can plan a weekend or a trip the same way, without retyping who's in it. And the care plan shapes what comes next: whoever carries the heavy care tasks gets an optional, private hint when leisure plans are made.</p>
             <p className="fine">Answers are never shown or attributed. This is bucketing, not cryptographic secrecy, and with only two people the other person can work out your number. Huddle decides; it does not book, split expenses or give medical, legal or financial advice.</p>
           </section>
         )}
@@ -271,12 +301,17 @@ export default function Simulator() {
             ))}
             {host && (
               <section className="nextround" aria-labelledby="next-h">
-                <h3 id="next-h">{checkin?.revisit ? "Someone isn't comfortable. Try another round?" : "Plan the next round for this group"}</h3>
-                <p className="fine">Same people, answering again from scratch. Nothing private carries over.{mode === "care" ? " Adjust the care need first if it changed. Heavy tasks are rotated using past assignments only." : ""}</p>
+                <h3 id="next-h">{checkin?.revisit ? "Someone isn't comfortable. Try another round?" : "What should the family decide next?"}</h3>
+                <p className="fine">Same people, answering again from scratch. Nothing private carries over.{mode === "care" ? " Heavy care tasks are rotated across rounds using past assignments only." : " If someone carries heavy care tasks, they get an optional private hint."}</p>
                 {mode === "care" && (
                   <NeedEditor tasks={tasks} dollars={dollars} onTasks={setTasks} onDollars={setDollars} summary="Care need for the next round" />
                 )}
-                <button className={checkin?.revisit ? "primary" : "ghost"} disabled={revisitBusy} onClick={() => void revisit()}>Start the next round</button>
+                <div className="row">
+                  <button className={checkin?.revisit ? "primary" : "ghost"} disabled={revisitBusy} onClick={() => void revisit(mode)}>Start the next round of this decision</button>
+                  {(["care", "everyday", "trip"] as Mode[]).filter((m) => m !== mode).map((m) => (
+                    <button key={m} className="ghost" disabled={revisitBusy} onClick={() => void revisit(m)}>{NEXT_LABEL[m]}</button>
+                  ))}
+                </div>
               </section>
             )}
           </>
@@ -317,7 +352,7 @@ export default function Simulator() {
                 </div>
               </div>
             ) : (
-              <AnswerForm key={person.token} mode={mode} token={person.token} name={person.name}
+              <AnswerForm key={person.token} mode={mode} token={person.token} name={person.name} hints={hints}
                 onSubmit={async (answer) => {
                   const out = await tool<{ warnings: string[] }>("submit_private_answer", { token: person.token, answer });
                   void refresh();

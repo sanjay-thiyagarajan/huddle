@@ -13,7 +13,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.goto("/");
     await audit(page, "start screen");
 
-    await page.getByRole("button", { name: "Sharing care for a parent" }).click();
+    await page.getByRole("button", { name: "Share care for a parent" }).click();
     await page.getByRole("button", { name: "Start the huddle" }).click();
     await expect(page.getByLabel("Hours per week you can give")).toBeVisible();
     await page.getByLabel("Show what the server holds").check();

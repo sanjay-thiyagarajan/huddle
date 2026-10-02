@@ -10,9 +10,11 @@
 Some group decisions hinge on numbers people don't want to say aloud: what they can spend, how many hours they can give, what they can't do. Whoever speaks first sets the group's limit, so the decision stalls or bends around the most open person. The sharpest case is siblings sharing the care of an ageing parent. Context (AARP and the National Alliance for Caregiving, *Caregiving in the U.S. 2025*): 63 million Americans provided ongoing care for an adult or a child in the past year, at roughly $7,200 a year out of pocket on average, and nearly half had a major financial impact. That our approach eases the stall is a **hypothesis**; [USER TEST RESULT SUMMARY, or "we have not yet tested it with real families"].
 
 ### What it does
+Huddle is for a family's stream of decisions, hard and easy, handled one way: private limits in, one unattributed plan out. The care plan comes first; weekend and trip plans follow for the same household without retyping who's in it, and whoever carries heavy care tasks gets an optional private hint when leisure plans are made (built only from the published care split, shown only to them, never applied for them).
+
 Huddle asks each person privately (by voice at a shared device, or a one-time link on their phone), works out what is compatible, and proposes one plan with the trade-off explained and nobody named. It handles non-responders with a reminder and a stated default, lets people change their answer until the round closes, and checks in the next day. If the check-in shows someone isn't comfortable, the host starts a follow-up round for the same people (everyone answers fresh); in care mode a fair-share record rotates heavy tasks across rounds using past assignments only. The result comes as a plan card the assistant can read aloud.
 - **Care mode:** each sibling privately gives hours/week, dollars/month and tasks they can't do. The group sees the gap in bands, a task split that respects every limit, and ways to close the gap.
-- **Weekend plan** and **friends' trip** modes run on the same engine.
+- **Weekend plan** and **trip** decisions run on the same engine and belong to the same household as the care plan.
 It decides; it does not book, split expenses or give medical, legal or financial advice.
 
 ### How we built it

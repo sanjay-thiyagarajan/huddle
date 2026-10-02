@@ -16,6 +16,15 @@ The clearest case is **siblings sharing the care of an ageing parent**. Context,
 
 Those figures are sourced facts about caregiving. **Our claim that families stall because nobody wants to say their limits aloud, and that Huddle eases it, is a hypothesis we have not yet tested with real families** (see [docs/user-test.md](docs/user-test.md), not yet run). The same shape shows up in smaller decisions: picking a weekend plan, or a friends' trip where nobody wants to be the one with the smallest budget.
 
+## One household, many decisions
+
+A family doesn't make one decision, it makes a stream of them, and they're connected. Huddle treats them as one household with one way of working:
+
+- **The hard one first:** who takes on which part of a parent's care, within what each person can give.
+- **Then the easy ones, same family:** a weekend plan, a trip. The next decision starts from the finished one, with the same people and no retyping.
+- **The care plan shapes what follows.** Whoever carries heavy care tasks gets an *optional private hint* when leisure plans are made ("you cover overnight; you could rule out early starts and long drives"). It comes only from the published care split, shows only to that person, and is never applied for them.
+- **A shared record:** the household's closed plans in one list, and a fair-share count of heavy care tasks so the next split rotates them.
+
 ## What Huddle does
 
 1. **Asks each person privately**, the way that suits them: by voice at a shared device, or through a private one-time link on their own phone.
@@ -27,11 +36,13 @@ Those figures are sourced facts about caregiving. **Our claim that families stal
 7. **Plans the next round**: if someone isn't comfortable (or a month later), the host opens a follow-up round for the same people. Everyone answers from scratch and nothing private carries over. In care mode a **fair-share record** counts heavy tasks (overnight cover, appointments) across rounds from past assignments only, and the next split rotates them where limits allow.
 8. **Hands over a plan card**: a copyable, printable summary that the assistant can also read aloud. It is built only from the aggregate result.
 
-| Mode | Each person privately gives | Output |
+| Decision | Each person privately gives | Output |
 |---|---|---|
-| **Care** (main story) | hours/week, dollars/month, task types they can't do | the care need vs. what's covered (gap in bands), a task split that respects every limit, ways to close the gap |
-| **Weekend plan** | budget, vibe, dealbreakers | one activity and the trade-off |
-| **Friends' trip** | budget for the trip, vibe, dealbreakers | one trip and the trade-off |
+| **Share care for a parent** (flagship) | hours/week, dollars/month, task types they can't do | the care need vs. what's covered (gap in bands), a task split that respects every limit, ways to close the gap |
+| **Plan a weekend** | budget, vibe, dealbreakers | one activity and the trade-off |
+| **Plan a trip** | budget for the trip, vibe, dealbreakers | one trip and the trade-off |
+
+All three run on the same private-matching engine and the same flow, and any of them can follow any other within a household.
 
 **What it is not:** it decides; it doesn't plan itineraries, book anything, split expenses, read calendars, or give medical, legal or financial advice. Care mode collects no health data. Tools like CareSplit track tasks and costs *after* a split is agreed; Huddle helps reach the split first (see [docs/novelty-search.md](docs/novelty-search.md)).
 
@@ -55,7 +66,7 @@ flowchart LR
   Agent -.->|aws mode| Bedrock[Strands agent on Amazon Bedrock<br/>not yet run]
 ```
 
-- `server/mcp_server.py`: self-hosted MCP server, Streamable HTTP at `/mcp`. Tools: `start_huddle`, `submit_private_answer`, `get_group_result`, `close_round`, `nudge_pending`, `submit_checkin`, `revisit_round`. Uses the official `mcp` SDK (pinned `<2`).
+- `server/mcp_server.py`: self-hosted MCP server, Streamable HTTP at `/mcp`. Tools: `start_huddle`, `submit_private_answer`, `get_group_result`, `close_round`, `nudge_pending`, `submit_checkin`, `revisit_round` (the household's next round; it can be a different decision type). Uses the official `mcp` SDK (pinned `<2`).
 - The simulator (`web/`, Vite + React) stands in for Alexa+. Its agent calls the MCP server over HTTP at runtime (`/api/agent/tool` proxies to `/mcp`).
 - `server/engine/`: `privacy.py` (bands, k rule, leak guard), `rounds.py` (lifecycle, check-in, audit trail), `everyday.py`, `trip.py`, `care.py` (integer task split with `scipy.optimize.milp`).
 - Private answers are stored server-side and returned only to their owner (`GET /me/answers`). The audit trail records who did what and when, never what anyone answered.
@@ -85,8 +96,8 @@ Optional extras: `pip install '.[voice]'` (speaker ID and Whisper), `pip install
 
 | Area | State |
 |---|---|
-| MCP server, privacy engine, three modes, check-in, revision, next round and fair-share record, plan card, audit trail | Built; 68 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
-| Simulator and private link flow | Built; 11 browser tests (demo flows, failure path, each feature, phone width, accessibility in light and dark, microphone path) |
+| MCP server, privacy engine, three decision types in one household, check-in, revision, next round and fair-share record, care-load hints, plan history, plan card, audit trail | Built; 73 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
+| Simulator and private link flow | Built; 12 browser tests (demo flows, failure path, each feature, phone width, accessibility in light and dark, microphone path) |
 | Voice ID and Whisper | Built; measured on synthetic voices only |
 | Strands agent on Bedrock, AgentCore hosting | Code and notes written, **never run against AWS** |
 | Real-group user test | **Not run** |

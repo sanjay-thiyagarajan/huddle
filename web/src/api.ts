@@ -7,6 +7,8 @@ export interface CheckinSummary {
   checked_in: number; of: number; complete: boolean; revisit?: boolean; message?: string;
   comfortable_count?: number; warning?: string;
 }
+export interface Hint { message: string; suggested_dealbreakers: string[] }
+export interface HouseholdPlan { round_id: string; mode: Mode; title: string; summary: string; at: string; checkin: string | null }
 export interface Status {
   round_id: string; mode: Mode; state: "collecting" | "reminded" | "closed";
   deadline_at: string; reminder_at: string;
@@ -14,6 +16,7 @@ export interface Status {
   me: { name: string; is_host: boolean; answered: boolean };
   participants: { name: string; channel: Channel; answered: boolean }[];
   events: AuditEvent[];
+  hints: Hint[];
 }
 export interface Holds { stored: { name: string; has_answer: boolean; value: string }[] }
 export interface Draft {
@@ -50,6 +53,7 @@ export const api = {
       .then((r) => parse<{ ready: boolean; result?: Result; checkin?: CheckinSummary }>(r)),
   myAnswers: (token: string) =>
     fetch(`/me/answers?token=${encodeURIComponent(token)}`).then((r) => parse<{ answered: boolean; answer: Record<string, unknown> | null }>(r)),
+  household: (token: string) => fetch(`/api/household?token=${encodeURIComponent(token)}`).then((r) => parse<{ plans: HouseholdPlan[] }>(r)),
   planCard: (token: string) => fetch(`/api/plan-card?token=${encodeURIComponent(token)}`).then((r) => parse<PlanCard>(r)),
   explain: (token: string) => fetch(`/api/agent/explain?token=${encodeURIComponent(token)}`).then((r) => parse<Explanation>(r)),
   checkin: (token: string, score: number) =>

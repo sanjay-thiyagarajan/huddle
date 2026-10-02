@@ -60,7 +60,7 @@ export default function LinkPage({ token }: { token: string }) {
           </>
         )
         : status.state === "closed" ? <p className="banner note">This round has closed.</p>
-        : <AnswerForm mode={status.mode} token={token} name={status.me.name}
+        : <AnswerForm mode={status.mode} token={token} name={status.me.name} hints={status.hints}
             onSubmit={async (a) => { await api.submit(token, a); await refresh(); }} />}
     </main>
   );

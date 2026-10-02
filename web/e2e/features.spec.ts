@@ -7,18 +7,18 @@ const save = (p: Page) => p.getByRole("button", { name: "Save my private answer"
 
 test("care need editor changes what the plan needs", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Sharing care for a parent" }).click();
+  await page.getByRole("button", { name: "Share care for a parent" }).click();
   await page.getByText(/What the care plan needs/).click();
   await page.getByLabel("Task 3 hours per week").fill("2"); // meals 8 -> 2: total 24
   await page.getByLabel("Money needed per month (dollars)").fill("1500");
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByRole("button", { name: "Close now" }).click();
-  await expect(page.getByText(/The plan needs 24 h\/week and \$1,500\/month/)).toBeVisible();
+  await expect(page.locator(".lead")).toContainText(/The plan needs 24 h\/week and \$1,500\/month/);
 });
 
 test("trip round: remote link, reveal, explain, check-in summary and audit trail", async ({ page, context }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "A trip with friends" }).click();
+  await page.getByRole("button", { name: "Plan a trip" }).click();
   await page.getByRole("button", { name: "Start the huddle" }).click();
 
   // Maya: $400, beach, no flying
@@ -59,7 +59,7 @@ test("trip round: remote link, reveal, explain, check-in summary and audit trail
   await expect(phone.getByRole("heading", { name: /the day after/i })).toBeVisible({ timeout: 10_000 });
   await phone.getByRole("button", { name: /2\. Uneasy/ }).click();
   for (const p of [page, phone]) {
-    await expect(p.getByText(/At least one person is not comfortable/)).toBeVisible({ timeout: 10_000 });
+    await expect(p.locator(".checkin").getByText(/At least one person is not comfortable/)).toBeVisible({ timeout: 10_000 });
     const text = await p.locator("body").innerText();
     expect(text).not.toMatch(/Chen.{0,40}Uneasy|Uneasy.{0,40}Chen/s);
   }
@@ -75,7 +75,7 @@ test("trip round: remote link, reveal, explain, check-in summary and audit trail
 test("phone width: no horizontal scroll and no accessibility violations", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await page.getByRole("button", { name: "Sharing care for a parent" }).click();
+  await page.getByRole("button", { name: "Share care for a parent" }).click();
   await page.getByText(/What the care plan needs/).click();
   const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(await overflow()).toBeLessThanOrEqual(0);
@@ -97,6 +97,7 @@ async function careAnswer(p: Page, hours: string, dollars: string, ...chips: str
 
 test("change my answer until the round closes; the audit trail shows a revision without a name", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Plan a weekend" }).click();
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByLabel(/Most you'd spend per person/).fill("100");
   await consent(page); await save(page);
@@ -122,7 +123,7 @@ test("change my answer until the round closes; the audit trail shows a revision 
 
 test("next round keeps the group, starts fresh, and shows the fair-share record", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Sharing care for a parent" }).click();
+  await page.getByRole("button", { name: "Share care for a parent" }).click();
   await page.getByLabel("How Chen answers").selectOption("voice"); // answer all three at the device
   await page.getByRole("button", { name: "Start the huddle" }).click();
 
@@ -157,7 +158,7 @@ test("plan card: copy, read aloud and print contain only the aggregate", async (
     (window as unknown as { SpeechSynthesisUtterance: unknown }).SpeechSynthesisUtterance = class { text: string; onend = null; onerror = null; constructor(t: string) { this.text = t; } };
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Sharing care for a parent" }).click();
+  await page.getByRole("button", { name: "Share care for a parent" }).click();
   await page.getByLabel("How Chen answers").selectOption("voice");
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await careAnswer(page, "13.5", "437", "Overnight cover");
@@ -185,5 +186,50 @@ test("plan card: copy, read aloud and print contain only the aggregate", async (
   await expect(page.locator(".device")).toBeHidden();
   await expect(page.getByRole("heading", { name: /care plan that fits everyone/ })).toBeVisible();
   await page.emulateMedia({ media: "screen" });
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
+});
+
+test("one household: care plan, then a weekend for the same family with a private care-load hint", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("How Chen answers").selectOption("voice");
+  await page.getByRole("button", { name: "Start the huddle" }).click();
+  await expect(page.locator(".hint")).toHaveCount(0); // no hints inside the care round itself
+
+  await careAnswer(page, "12", "600");
+  await page.getByRole("button", { name: /^Ben/ }).click();
+  await careAnswer(page, "8", "500");
+  await page.getByRole("button", { name: /^Chen/ }).click();
+  await careAnswer(page, "0", "400"); // Chen can give no hours, so carries no heavy tasks
+  await expect(page.getByRole("heading", { name: /care plan that fits everyone/ })).toBeVisible({ timeout: 10_000 });
+
+  // Same family, different decision: no retyping of people
+  await expect(page.getByRole("heading", { name: "What should the family decide next?" })).toBeVisible();
+  await page.getByRole("button", { name: "Plan a weekend", exact: true }).click();
+  await expect(page.getByText(/The next decision is open for the same family/)).toBeVisible();
+  await expect(page.getByLabel(/Most you'd spend per person/)).toBeVisible();
+
+  // Maya carries heavy tasks: she gets an optional private hint; applying it is her choice
+  await page.getByRole("button", { name: /^Maya/ }).click();
+  const hint = page.locator(".hint");
+  await expect(hint).toContainText(/In your household's latest care plan you carry \d+ h\/week of heavy tasks/);
+  await expect(hint).toContainText("only you see this");
+  await page.getByRole("button", { name: "Add these to my dealbreakers" }).click();
+  await expect(page.getByRole("button", { name: "Early start" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel(/Most you'd spend per person/).fill("100");
+  await consent(page); await save(page);
+
+  // Chen carries nothing, so no hint
+  await page.getByRole("button", { name: /^Chen/ }).click();
+  await expect(page.locator(".hint")).toHaveCount(0);
+  await page.getByLabel(/Most you'd spend per person/).fill("100");
+  await consent(page); await save(page);
+  await page.getByRole("button", { name: /^Ben/ }).click();
+  await page.getByLabel(/Most you'd spend per person/).fill("100");
+  await consent(page); await save(page);
+
+  await expect(page.getByRole("heading", { name: "Here's the plan" })).toBeVisible({ timeout: 10_000 });
+  const plans = page.getByRole("list", { name: "Family plans so far" });
+  await expect(plans).toContainText("Care plan");
+  await expect(plans).toContainText("Weekend plan");
   expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
 });

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, CARE_DEALBREAKERS, EVERYDAY_ATTRS, EVERYDAY_VIBES, listen, speechSupported, TRIP_ATTRS, TRIP_VIBES } from "./api";
-import type { Mode } from "./api";
+import type { Hint, Mode } from "./api";
 
 type Draft = Record<string, unknown>;
 const blank = (mode: Mode): Draft =>
@@ -25,8 +25,8 @@ function Chips({ options, value, onChange, label }: {
 }
 
 /** One person's private answer: say it or fill it in, check it, then save. */
-export default function AnswerForm({ mode, token, name, onSubmit, initial }: {
-  mode: Mode; token: string; name: string; initial?: Record<string, unknown>;
+export default function AnswerForm({ mode, token, name, onSubmit, initial, hints }: {
+  mode: Mode; token: string; name: string; initial?: Record<string, unknown>; hints?: Hint[];
   onSubmit: (answer: Record<string, unknown>) => Promise<unknown>;
 }) {
   const start = (): Draft => (initial ? Object.fromEntries(Object.entries(initial).map(([k, v]) => [k, typeof v === "number" ? String(v) : v])) : blank(mode));
@@ -88,6 +88,15 @@ export default function AnswerForm({ mode, token, name, onSubmit, initial }: {
           <button type="button" className="ghost" aria-pressed={listening} onClick={mic}>{listening ? "Stop listening" : "Use microphone"}</button>
         )}
       </div>
+      {hints?.map((h) => (
+        <div className="hint" key={h.message} role="note">
+          <p>{h.message}</p>
+          <button type="button" className="ghost"
+            onClick={() => set("dealbreakers", [...new Set([...list("dealbreakers"), ...h.suggested_dealbreakers])])}>
+            Add these to my dealbreakers
+          </button>
+        </div>
+      ))}
       {engine && <p className="fine" role="status">Understood by: {engine === "bedrock" ? "Amazon Bedrock" : engine === "mock-fallback" ? "built-in parser (Bedrock was unavailable)" : "built-in parser"}. Check the fields below.</p>}
       {followup && <p className="followup" role="status">{followup}</p>}
 

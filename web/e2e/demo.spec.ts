@@ -5,7 +5,7 @@ const MAYA = "I can do maybe twelve hours and $613 a month but not nights";
 
 test("care round: voice, remote link and reveal, with no value leaking into other panels", async ({ page, context }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Sharing care for a parent" }).click();
+  await page.getByRole("button", { name: "Share care for a parent" }).click();
   await page.getByRole("button", { name: "Start the huddle" }).click();
 
   // Maya, by voice (typed fallback), via the agent parser
@@ -54,6 +54,7 @@ test("care round: voice, remote link and reveal, with no value leaking into othe
 
 test("failure path: reminder fires, then defaults are applied and stated", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Plan a weekend" }).click();
   await page.getByLabel(/Short 45-second deadline/).check();
   await page.getByRole("button", { name: "Start the huddle" }).click();
   await page.getByLabel("Most you'd spend per person (dollars)").fill("80");

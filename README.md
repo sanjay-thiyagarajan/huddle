@@ -1,6 +1,6 @@
 # Huddle
 
-**A private group-decision agent for the household.** Everyone answers in private. Huddle works out what fits all the limits and proposes one plan, with the trade-off explained, without saying who set which limit.
+**A fair, private home.** Everyone in the household tells Huddle privately what they can take on. Huddle proposes a fair plan, with the trade-off explained, without saying who set which limit.
 
 Built for the [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/): primary track **Alexa+**, mini-challenges **AWS Builder** and **Open Source**. A new project, started after Aug 31, 2026, released under the MIT licence.
 
@@ -8,57 +8,58 @@ Built for the [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/
 
 ## The problem
 
-Some decisions depend on numbers people don't want to say out loud: what they can spend, how many hours they can give, what they simply can't do. When one person has to speak first, that person's limit becomes the group's limit, and everyone else stays quiet or resents it.
+In a home, the load tends to pile up on one person. It comes in three sizes: the **heavy** (caring for a parent), the **daily** (the chores) and the **occasional** (a weekend, a trip). Each one depends on numbers people find hard to say out loud: how much time they can really give, how much they can spend, what they can't do. When someone has to speak first, that person's limit becomes the group's limit, and everyone else stays quiet or ends up carrying more.
 
-The clearest case is **siblings sharing the care of an ageing parent**. From [AARP and the National Alliance for Caregiving, *Caregiving in the U.S. 2025*](https://www.aarp.org/press/releases/2025-07-24-new-report-reveals-crisis-point-for-americas-63-million-family-caregivers.html):
-
-- 63 million Americans (nearly 1 in 4 adults) provided ongoing care for an adult or a child in the past year.
-- Caregivers pay roughly $7,200 a year out of pocket on average.
-- Nearly 1 in 4 caregivers provide 40 or more hours of care a week, and nearly half had at least one major financial impact.
-
-The same shape shows up every day in **household chores**, where one person often ends up carrying most of the load, including the invisible part: noticing what needs doing, planning it and remembering it. Sources (details and what each does and doesn't show in [docs/evidence-household-load.md](docs/evidence-household-load.md)):
+The evidence on how unequal the load is (the sources, and what each does and doesn't show, are in [docs/evidence-household-load.md](docs/evidence-household-load.md)):
 
 - On an average day in the U.S., women spent 2.8 hours on household activities and men 2.1 hours, among those who did any ([BLS, American Time Use Survey 2025](https://www.bls.gov/news.release/atus.htm)).
-- In a survey of married and cohabiting adults, 59% of women said they do more of the household chores than their partner, and 38% of women were very satisfied with how chores are divided in October 2020, against 55% of men ([Pew Research Center, 2021](https://www.pewresearch.org/short-reads/2021/01/25/for-american-couples-gender-gaps-in-sharing-household-responsibilities-persist-amid-pandemic/)).
+- 59% of women said they do more of the household chores than their partner, and 38% of women were very satisfied with how chores are divided in October 2020, against 55% of men ([Pew Research Center, 2021](https://www.pewresearch.org/short-reads/2021/01/25/for-american-couples-gender-gaps-in-sharing-household-responsibilities-persist-amid-pandemic/)).
 - In interviews with 35 couples, one partner did more of the anticipating and monitoring behind household tasks even when couples described the split as shared ([Daminger, *American Sociological Review*, 2019](https://behavioralscientist.org/how-couples-share-cognitive-labor-and-why-it-matters/)).
 - Across 14 studies, in 11 women reported more depressive or psychological distress as their unpaid labour demands rose (Ervin et al., *The Lancet Public Health*, 2022).
+- The heaviest case is caring for a parent. From [AARP and the National Alliance for Caregiving, *Caregiving in the U.S. 2025*](https://www.aarp.org/press/releases/2025-07-24-new-report-reveals-crisis-point-for-americas-63-million-family-caregivers.html): 63 million Americans (nearly 1 in 4 adults) provided ongoing care for an adult or a child in the past year, at roughly $7,200 a year out of pocket on average, and nearly half had at least one major financial impact.
 
-The same shape shows up in smaller decisions too: a weekend plan, or a friends' trip where nobody wants to be the one with the smallest budget.
+## One home, three sizes of load
+
+Huddle treats them the same way: *private limits in, one unattributed plan out.* And they share **one household**, with the same people and the same private profile, so what you carry in one counts in the others.
+
+| Size | What it is | How Huddle handles it |
+|---|---|---|
+| **The heavy**: caring for a parent | The family sharing a parent's care between them: the hours each person can give (check-ins, appointments and transport, meals, paperwork, overnight cover), the money each can put in each month, and the tasks they can't do | A decision. Everyone answers privately; the family gets who owns which task, the gap in bands and ways to close it. Each person sees their own hours privately |
+| **The daily**: household chores | A stream of small jobs, week after week | A fair agent plans each week from everyone's private availability, preferences and skills, offers new chores to the best-fit person, and remembers who carried what |
+| **The occasional**: a weekend, a trip | A one-off group choice | A decision: one plan and the trade-off, nobody named |
+
+```mermaid
+flowchart TB
+  H["<b>One household</b><br/>the same people, one private profile each"]
+  C["<b>The heavy</b><br/>caring for a parent"]
+  D["<b>The daily</b><br/>chores, planned fairly each week"]
+  O["<b>The occasional</b><br/>a weekend or a trip"]
+  H --> C
+  H --> D
+  H --> O
+  C -->|"care you take on counts<br/>in your chore share"| D
+  C -->|"a private hint when<br/>leisure is planned"| O
+```
+
+- **Care counts in your chores.** If you've taken on overnight care, the chore plan counts it, so you aren't also handed a full chore load. It uses only what the household already sees (who owns each care task, and its total hours), never anyone's private hours.
+- **Care shapes the occasional.** Whoever carries heavy care tasks gets an optional private hint when a weekend or trip is planned. It's never applied for them.
+- **Fairness has memory.** A ledger of what people actually did, a heavy week reported privately, and rotation of heavy tasks mean the same person doesn't keep getting the hardest job.
+
+Huddle decides; it doesn't hire nurses, book providers, move money, split expenses, read calendars, or give medical, legal or financial advice. Care mode collects no health data. When the family can't cover a parent's care between them, the plan suggests paid help as one option at a placeholder rate.
 
 ## What Huddle does
 
-Huddle is built for a **household**, in two connected parts, handled one way: *private limits in, one unattributed plan out.*
-
-- **Family decisions** (a care split, a weekend, a trip): a group decides once, with everyone's limits kept private.
-- **Household chores**: a fair agent splits the week's chores among the people who live there, week after week, from everyone's private availability, preferences and skills.
-
-### Family decisions
-
-1. **Asks each person privately**, in the way that suits them: by voice at a shared device, or on their own phone through a private one-time link.
-2. **Works out what is compatible** and reports only group-level results, in coarse bands.
+1. **Asks each person privately**, in the way that suits them: by voice at a shared device, or on their own phone through a private link.
+2. **Works out what is compatible** and reports only group-level results, in coarse bands, plus who owns what.
 3. **Proposes one plan and explains the trade-off**, without naming anyone ("Picked X; some of you preferred Y, but the budget ruled it out").
-4. **Reminds people who haven't answered**: a first reminder half-way and a final one near the deadline, plus a host nudge. In-app, optional email, and the device's share sheet. Then a stated default if someone still doesn't answer.
-5. **Lets people change their mind** until the round closes.
-6. **Checks in the day after**: each person privately rates how the plan sits with them, and the group sees an unattributed summary.
-7. **Plans the next decision for the same family**, without retyping who's in it. It can be the same decision again or a different one. The care plan shapes what follows: whoever carries heavy care tasks gets an optional private hint when leisure plans are made, and a fair-share record rotates heavy tasks across care rounds.
-8. **Hands over a plan card**: a copyable, printable summary that the assistant can also read aloud.
+4. **Plans the chores fairly each week.** Hard limits first, then a fair share in proportion to each person's own availability (heavier chores and mental load such as planning and booking weigh more), then preferences and skills, then rotation. Chores can be added any time in plain words ("clean the gutters by Saturday, about an hour") or pre-planned with a due date or recurrence.
+5. **Negotiates ad hoc chores.** A new chore is offered to the best-fit person, who can accept or decline; if they decline, or don't answer for 24 hours, the agent asks the next. Nobody can see who was asked or who declined.
+6. **Talks plainly**: "what's on my plate", "I did the bins", "who has the laundry", by typing, speaking, or through the MCP tools.
+7. **Reminds people for real**: a scheduler sends reminders in-app and, if the host entered an address, by email, plus a stated default if someone never answers.
+8. **Checks in afterwards**: privately after a decision, and privately after each chore week.
+9. **Hands over a plan card** the assistant can read aloud, and a copyable weekly chore plan.
 
-| Decision | Each person privately gives | The group gets |
-|---|---|---|
-| **Share care for a parent** (flagship) | hours/week, dollars/month, task types they can't do | the care need vs. what's covered (gap in bands), who owns which task, ways to close the gap. Each person sees their own hours privately. |
-| **Plan a weekend** | budget, vibe, dealbreakers | one activity and the trade-off |
-| **Plan a trip** | budget for the trip, vibe, dealbreakers | one trip and the trade-off |
-
-Huddle decides; it doesn't book anything, split expenses, read calendars, or give medical, legal or financial advice. Care mode collects no health data.
-
-### Household chores: the fair agent
-Housework isn't one decision, it's a stream, and it's easy for it to pile up on one person. Each member tells the agent **privately** how many hours they can take, what they love, avoid or can't do, what they're good at, and what they'd like to learn. Chores can be **added any time in plain words** ("clean the gutters by Saturday, about an hour") or **pre-planned** with a due date or a recurrence. Then:
-
-- **The agent plans each week fairly:** hard limits first (nobody gets what they can't do or more than they offered), then a fair share in proportion to each person's own availability, with heavier chores and mental load (planning, booking, remembering) weighted up, then preferences and skills, then rotation of heavy chores.
-- **It remembers:** a rolling ledger of what people actually did lightens the load of someone who carried extra, and a heavy week (reported privately) lightens the next. Exemptions are capped and availability has a floor, so private self-reports can't be used to dodge a fair share.
-- **It negotiates ad hoc chores:** a new chore is *offered* to the best-fit person, who can accept or decline; if they decline, or don't answer for 24 hours, the agent asks the next. Nobody can see who was asked or who declined.
-- **It talks plainly:** "what's on my plate", "I did the bins", "who has the laundry", "hand back the laundry", by typing or speaking, or through the MCP tools.
-- **It's transparent without exposing anyone:** the household sees who owns what and an aggregate fairness report; each person sees their own load against their own fair share. How it decides, and what is and isn't visible, is in [docs/fairness-agent.md](docs/fairness-agent.md).
+How the chore agent decides, what is private and what is visible, and where its limits are: [docs/fairness-agent.md](docs/fairness-agent.md).
 
 ### On a shared speaker
 Answering a private number out loud can be overheard, so the **voice-only mode** (see [docs/alexa-fit.md](docs/alexa-fit.md)) starts by asking whether anyone is within earshot and offers the person's private phone link or the screen instead. The assistant never says an answer back unless asked, the draft stays on the server, it is saved through the MCP tool, and consent is spoken.
@@ -72,7 +73,7 @@ Answering a private number out loud can be overheard, so the **voice-only mode**
 - Voice identification is a stand-in for Alexa person recognition. It separates profiles on a shared device; it does not authenticate anyone.
 - An automated **leak test** seeds distinctive values and calls every route and MCP tool as every participant, failing if anyone else's value appears.
 
-## How a round works
+## How a family decision works
 
 ```mermaid
 sequenceDiagram
@@ -92,6 +93,28 @@ sequenceDiagram
   D->>M: get_group_result(token)
   M-->>D: aggregate result plus the caller's own share
   D->>M: submit_checkin(token, score) or revisit_round(token, mode)
+```
+
+## How a chore gets assigned
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as Anyone in the household
+  participant G as Household agent
+  participant B as Best-fit member
+  participant N as Next member
+  A->>G: "add fix the squeaky door"
+  G->>G: understand it (kind, time, due date), then rank people by fairness first and fit second
+  G->>B: offer the chore (only they see it)
+  alt accepts
+    B-->>G: accept
+    G-->>A: the owner is shown to the household
+  else declines, or silent for 24 hours
+    B-->>G: decline (the reason stays private)
+    G->>N: offer it to the next person
+  end
+  Note over G: the household only ever sees "being offered", never who was asked or who declined
 ```
 
 ## Technical architecture
@@ -157,7 +180,7 @@ flowchart LR
 
 | Layer | Where | What it does |
 |---|---|---|
-| MCP server | `server/mcp_server.py` | Seventeen tools over Streamable HTTP (seven for family decisions, ten for the household), called at runtime by the household agent |
+| MCP server | `server/mcp_server.py` | Eighteen tools over Streamable HTTP (seven for family decisions, eleven for the household), called at runtime by the household agent |
 | Privacy engine | `server/engine/privacy.py` | Bands, the k rule, the leak guard |
 | Round service | `server/engine/rounds.py` | Lifecycle, answers, revision, check-in, household chain, reminders, audit trail |
 | Decision engines | `server/engine/care.py`, `everyday.py`, `trip.py` | Care split via `scipy.optimize.milp`; weekend and trip matching |
@@ -233,6 +256,7 @@ Streamable HTTP at `/mcp`, protocol version 2025-11-25 (official `mcp` Python SD
 | `hand_back_chore` | The owner can't do it after all: the agent asks the next best person |
 | `complete_chore` | The owner marks a planned chore done |
 | `week_checkin` | Private: how the week felt; a heavy week lightens the next |
+| `start_household_decision` | Start a care, weekend or trip decision for the whole household: the same people, each answering privately with their own link |
 | `ask_household_agent` | Plain words: add a chore, "what's on my plate", "I did the bins", "who has the laundry" |
 
 Try it from any MCP client:
@@ -261,7 +285,7 @@ make install   # Python 3.12 venv and web dependencies
 make dev       # API and MCP on :8000, simulator on http://localhost:5173
 ```
 
-Open `http://localhost:5173`. For the household, open the **Household chores** tab, create a household, press **Add a starter set of chores** then **Plan the week**, switch between members to set private limits, and try the agent ("add fix the squeaky door"). For family decisions, stay on **Family decisions**, keep "Share care for a parent" selected and press **Start the huddle**. Answer as Maya and Ben on the device (type or speak your answer, or turn on voice-only mode), open Chen's private link in a second tab, and watch the plan appear. Use the short 45-second deadline option to see the reminder and the stated defaults.
+Open `http://localhost:5173`. The **Home** tab is the product: create a household, press **Add a starter set of chores** then **Plan the week**, switch between members to set their private limits, and try the agent ("add fix the squeaky door"). From the same page, start **Share a parent's care** for the household: each member answers their part privately, and once the decision closes the care people have taken on counts in the chore plan. The **Try a decision** tab runs a one-off decision without a household.
 
 ```
 make test      # unit, protocol and leak tests
@@ -300,8 +324,8 @@ docs/              plan, architecture notes, accuracy reports, friction log, pro
 
 ## Verification
 
-- 209 automated tests, including the privacy leak test across every REST route and MCP tool (with a full household lifecycle of profiles, plans, offers, declines and check-ins), a protocol test asserting the negotiated MCP version, the fairness engine's hard-limit, fairness, preference, rotation and ledger properties, the chore agent's parsing and intents, the scheduler, real SMTP delivery against a local mail sink, and an end-to-end run of a fictional family through speaker ID, Whisper, the voice-only dialogue and the MCP tools ([docs/family-simulation.md](docs/family-simulation.md)).
-- 26 Playwright browser tests covering the flows, the household, reminders, voice-only privacy, phone width, and accessibility (axe, WCAG A and AA) in light and dark.
+- 225 automated tests, including the privacy leak test across every REST route and MCP tool (with a full household lifecycle of profiles, plans, offers, declines and check-ins), a protocol test asserting the negotiated MCP version, the fairness engine's hard-limit, fairness, preference, rotation and ledger properties, the chore agent's parsing and intents, the scheduler, real SMTP delivery against a local mail sink, and an end-to-end run of a fictional family through speaker ID, Whisper, the voice-only dialogue and the MCP tools ([docs/family-simulation.md](docs/family-simulation.md)).
+- 29 Playwright browser tests covering the flows, the household with decisions and chores together, reminders, voice-only privacy, phone width, and accessibility (axe, WCAG A and AA) in light and dark.
 - Voice accuracy report: [docs/voice-accuracy.md](docs/voice-accuracy.md).
 
 ## Documentation

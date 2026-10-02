@@ -311,7 +311,8 @@ export default function Simulator() {
       <main className="stage">
         {!round && (
           <section className="intro">
-            <h1>Huddle</h1>
+            <h1>Try a decision</h1>
+            <p className="fine">A one-off family decision without setting up a household. For your own home, with chores and decisions together, use the Home tab.</p>
             <p className="lede">Some decisions stall because nobody wants to say their real number out loud. Huddle asks each person privately and proposes one plan.</p>
             <p>It's built for a family's decisions, hard and easy, with one way of working. Take three siblings sharing a parent's care: one can give 12 hours a week but not nights, one lives far away and can send money, one can only drive on weekdays. Nobody wants their limit to be the one that decides. Huddle collects each limit privately, works out what fits everyone, and shows a plan and the trade-off without saying who set which limit.</p>
             <p>Then the same family can plan a weekend or a trip the same way, without retyping who's in it. And the care plan shapes what comes next: whoever carries the heavy care tasks gets an optional, private hint when leisure plans are made.</p>

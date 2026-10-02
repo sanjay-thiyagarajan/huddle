@@ -152,7 +152,7 @@ test("handing a chore back asks someone else, and the household survives a reloa
   await page.reload();
   await expect(page.getByRole("heading", { name: "Our home" })).toBeVisible(); // stored on this device
   await page.getByRole("button", { name: "Forget this household on this device" }).click();
-  await expect(page.getByRole("heading", { name: "Share the household load" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Set up your home" })).toBeVisible();
 });
 
 test("household pages have no accessibility violations in light and dark, and fit a phone", async ({ page }) => {

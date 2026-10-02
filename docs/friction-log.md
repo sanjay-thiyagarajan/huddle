@@ -73,3 +73,12 @@ Format per entry: task attempted, steps taken, expected vs actual, severity, wor
 - **Severity:** Low.
 - **Workaround:** Environment variable plus an explicit fallback.
 - **Suggestion:** Publish the current recommended model id per region in the Strands Bedrock docs.
+
+## F-009: HiGHS (via SciPy `milp`) occasionally prints an internal debug line
+- **Task attempted:** Fair weekly chore planning as a sequence of small integer programs (a leximin: several `scipy.optimize.milp` solves per plan).
+- **Steps taken:** Ran the household test suite and the full suite repeatedly.
+- **Expected:** Quiet output; failures only via Python exceptions or `result.success`.
+- **Actual:** In one full run the last line of test output was `HighsMipSolverData::transformNewIntegerFeasibleSolution tmpSolver.run();`, an internal solver print that bypasses Python logging and buried pytest's summary line. It did not reproduce in the next runs and results were correct.
+- **Severity:** Low (cosmetic, but it can hide a test summary).
+- **Workaround:** Read pass/fail from the exit code or `grep` for "passed|failed" instead of relying on the last line.
+- **Suggestion:** Route HiGHS solver output through `options={"disp": False}` consistently (it still printed here), or document that some internal messages are not suppressed.

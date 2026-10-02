@@ -6,6 +6,8 @@
 - **The result reads well aloud** (the plan card can be read out).
 - **The integration is real:** a self-hosted MCP server over Streamable HTTP (spec 2025-11-25) that the assistant's agent calls.
 
+- **Daily chores are a natural voice use.** "What's on my plate", "I did the bins", "who has the laundry" and "add fix the squeaky door" work as plain-word commands through `ask_household_agent`. Replies are about chores (which the household shares) and the caller's own load, never anyone's private preferences.
+
 ## The weak spot, stated plainly
 **Answering a private number out loud on a shared speaker can be overheard.** Huddle exists so nobody has to say their number in front of the others. So voice-only answering is only safe when nobody can hear.
 

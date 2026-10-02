@@ -44,8 +44,9 @@ export default function HomeApp() {
   if (!home) {
     return (
       <main className="home-setup">
-        <h1>Share the household load</h1>
-        <p className="lede">Housework is a stream of small decisions, and it's easy for one person to end up doing most of it. Everyone tells Huddle privately what they can take on and what they'd rather not. The agent splits the chores fairly, week after week, and never says who set which limit.</p>
+        <h1>Set up your home</h1>
+        <p className="lede">A home carries three sizes of load: the heavy (caring for a parent), the daily (the chores) and the occasional (a weekend, a trip). It's easy for one person to end up carrying most of it, because saying "I can't take more" out loud is hard.</p>
+        <p>Everyone tells Huddle privately what they can take on and what they'd rather not. It proposes fair plans for all three, week after week, and never says who set which limit. They share one household, so what you carry in one counts in the others.</p>
         <form onSubmit={(e) => void create(e)}>
           <label>Household name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
           <fieldset className="people">

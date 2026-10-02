@@ -4,7 +4,7 @@ How Huddle splits household chores, what "fair" means, what stays private, and w
 The planner is `server/engine/chores.py` (pure logic) and the household service is `server/engine/home.py`.
 
 ## What a household member does
-1. **Tells the agent privately** how many hours of chores they can take this week, what they love, avoid or can't do,
+1. **Tells the agent privately** how many hours of household work they can take this week (chores, plus any care they've agreed to), what they love, avoid or can't do,
    what they're good at, what they'd like to learn, and anything they know how to do ("plumbing", "the car").
 2. **Adds chores any time**, in plain words ("clean the gutters by Saturday, about an hour") or with details. A chore
    can be **pre-planned** (a due date, or a daily, weekly, every-other-week or monthly recurrence) or **ad hoc**.
@@ -26,7 +26,13 @@ Fairness is decided in this order, and each step never undoes the one before it:
    - **A ledger:** over the last 8 weeks, what people actually *did* (marked done) is compared with their fair share. Someone
      who carried extra gets a lighter share now; someone who carried less gets more. Half the gap is carried forward.
    - **How the week felt:** if someone said last week was far too heavy (1) or heavy (2), their share is reduced by 20% or 10%.
-   The planner minimises the *largest* gap between anyone's load and their fair share.
+   - **Care already taken on counts.** If the household has a closed care plan, each person's share of it is counted
+     as work already carried, so someone with heavy care gets fewer chores. It is estimated from what the household
+     already sees (who owns each care task and the task's total hours, split evenly when several people own it),
+     never from anyone's private hours.
+   The planner minimises the *largest* gap between anyone's load and their fair share, then locks in whoever is stuck
+   at that gap (for example someone already carrying far more than their share) and keeps minimising among everyone
+   else (a leximin), so the rest of the household stays balanced.
 3. **Preferences.** Among equally fair splits it picks the best match: what people love (+3), avoid (-4), their skill
    (-1 to +1), anything they said they know how to do (+2), and what they want to learn (+1).
 4. **Rotation.** A heavy chore doesn't stay with the same person week after week when someone else could take it.

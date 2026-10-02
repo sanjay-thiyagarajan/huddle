@@ -57,8 +57,12 @@ def default_answer(answered: list[dict]) -> dict:
 
 def _pretty(start: datetime, minutes: int) -> dict:
     end = start + timedelta(minutes=minutes)
-    return {"start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes"),
-            "label": sc.label(start), "span": sc.span_label(start, end)}
+    return {
+        "start": start.isoformat(timespec="minutes"),
+        "end": end.isoformat(timespec="minutes"),
+        "label": sc.label(start),
+        "span": sc.span_label(start, end),
+    }
 
 
 def tally(named_answers: list[tuple[str, dict]], need: dict) -> list[dict]:
@@ -66,7 +70,9 @@ def tally(named_answers: list[tuple[str, dict]], need: dict) -> list[dict]:
     rows = []
     for slot in need["slots"]:
         votes = [a["slots"].get(slot, "no") for _, a in named_answers]
-        rows.append({"slot": slot, "yes": votes.count("yes"), "maybe": votes.count("maybe"), "no": votes.count("no")})
+        rows.append(
+            {"slot": slot, "yes": votes.count("yes"), "maybe": votes.count("maybe"), "no": votes.count("no")}
+        )
     return sorted(rows, key=lambda r: (r["no"], -r["yes"], r["slot"]))
 
 
@@ -82,18 +88,17 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
         fit, tradeoff = "everyone", f"{plan['label']} works for everyone."
     elif best["no"] == 0:
         fit = "flex"
-        tradeoff = (
-            f"{plan['label']} is the best fit: everyone can make it, but some of you would need to move something."
-        )
+        tradeoff = f"{plan['label']} is the best fit: everyone can make it, but some of you would need to move something."
     else:
         fit = "most"
-        tradeoff = (
-            f"No time works for everyone. {plan['label']} is the closest: "
-            + (f"{best['no']} of {n} can't make it." if policy.single_limit_detail else "someone can't make it.")
+        tradeoff = f"No time works for everyone. {plan['label']} is the closest: " + (
+            f"{best['no']} of {n} can't make it." if policy.single_limit_detail else "someone can't make it."
         )
     alternatives = [
-        {**_pretty(datetime.fromisoformat(r["slot"]), dur), "fit": "everyone" if r["no"] == 0 and r["maybe"] == 0
-         else "flex" if r["no"] == 0 else "most"}
+        {
+            **_pretty(datetime.fromisoformat(r["slot"]), dur),
+            "fit": "everyone" if r["no"] == 0 and r["maybe"] == 0 else "flex" if r["no"] == 0 else "most",
+        }
         for r in ranked[1:3]
     ]
     return {
@@ -104,8 +109,11 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
         "plan": plan,
         "fit": fit,
         "tradeoff": tradeoff,
-        "counts": ({"can": best["yes"], "flex": best["maybe"], "cannot": best["no"]}
-                   if policy.single_limit_detail else None),
+        "counts": (
+            {"can": best["yes"], "flex": best["maybe"], "cannot": best["no"]}
+            if policy.single_limit_detail
+            else None
+        ),
         "alternatives": alternatives,
         "group_size": n,
         "defaults_applied": defaults_applied,

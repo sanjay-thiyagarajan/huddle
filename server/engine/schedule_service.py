@@ -405,6 +405,7 @@ def add_commitment(
             rule_suggestion = _learn(s, me, first["circle"], f["circle"])
     elif choice in ("move_existing", "drop_existing") and first:
         existing = _own(s, me, first["id"])
+        kept_status = existing.status
         _remove_occurrence(existing, _dt(first["start"]))
         s.add(existing)
         if choice == "move_existing":
@@ -419,7 +420,7 @@ def add_commitment(
                 "repeat": "none",
                 "until": None,
             }
-            _create(s, me, moved, now, existing.status, existing.shared_round_id)
+            _create(s, me, moved, now, kept_status, existing.shared_round_id)
         rule_suggestion = _learn(s, me, f["circle"], first["circle"])
     elif choice == "ask_others" and first:
         next_step = {"action": "ask_others", "existing_id": first["id"]}

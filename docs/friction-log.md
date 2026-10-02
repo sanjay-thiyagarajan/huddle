@@ -55,3 +55,21 @@ Format per entry: task attempted, steps taken, expected vs actual, severity, wor
 - **Severity:** Medium.
 - **Workaround:** Decode the WAV ourselves (soundfile, resample to 16 kHz) and pass the float32 array to `transcribe()`, which skips PyAV.
 - **Suggestion:** faster-whisper should declare a minimum `av` version that supports `metadata_errors`, so pip resolves a compatible pair.
+
+## F-007: AgentCore MCP guide shows a single-file server; unclear how to host a composed app
+- **Task attempted:** Work out how to host Huddle's MCP server on AgentCore Runtime (docs: "Deploy MCP servers in AgentCore Runtime").
+- **Steps taken:** Read the guide end to end and compared it with Huddle, a FastAPI app with FastMCP mounted at `/mcp` plus REST routes.
+- **Expected:** A statement of what the runtime launches (a command, an ASGI app, a container) so a mounted app is clearly fine.
+- **Actual:** The contract (`0.0.0.0:8000/mcp`, stateless HTTP) is clear, but the scaffold step has you overwrite a generated `main.py` with a single FastMCP file run via `mcp.run(...)`. The guide doesn't say whether `uvicorn server.api:app` serving `/mcp` is equally supported.
+- **Severity:** Low to medium. Unverified, since no AWS credentials were available to try it.
+- **Workaround:** Documented both options in `deploy/agentcore/README.md` as an open question for the first real deploy.
+- **Suggestion:** Add a "bring your own ASGI app / container" example next to the single-file one, and state which is supported.
+
+## F-008: No default model id, so the agent cannot be tried without catalog lookup
+- **Task attempted:** Build the Strands + Bedrock agent without hard-coding a model id from memory (the plan forbids it).
+- **Steps taken:** Inspected `strands.models.BedrockModel`; its `model_id` is a required choice of the caller. The catalog is only visible with credentials.
+- **Expected:** A documented current default, or a way to list usable ids offline.
+- **Actual:** Cannot choose or validate an id without an AWS account and region. Huddle reads `HUDDLE_BEDROCK_MODEL_ID` and refuses to start the agent if unset (then falls back to the mock parser, labelled `mock-fallback`).
+- **Severity:** Low.
+- **Workaround:** Environment variable plus an explicit fallback.
+- **Suggestion:** Publish the current recommended model id per region in the Strands Bedrock docs.

@@ -121,7 +121,16 @@ async def agent_tool(body: ToolIn):
 def agent_parse(body: ParseIn, s: Session = Depends(_session)):
     """Turn one person's words into a draft answer. Nothing is stored until they confirm."""
     mode = rounds.status(s, body.token)["mode"]
-    return huddle_agent.parse_utterance(mode, body.text)
+    return huddle_agent.parse_with_engine(mode, body.text)
+
+
+@app.get("/api/agent/explain")
+def agent_explain(token: str, s: Session = Depends(_session)):
+    """Plain-language explanation of the closed round's aggregate result (agent sees no raw answers)."""
+    out = rounds.get_result(s, token)
+    if not out["ready"]:
+        raise rounds.HuddleError("not_ready", "The round is still open.", 409)
+    return huddle_agent.explain(out["result"])
 
 
 # ---- voice: speaker ID is a stand-in for Alexa person recognition, not security ----------------

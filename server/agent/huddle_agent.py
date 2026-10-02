@@ -5,12 +5,22 @@
   a deterministic keyword parser (no credentials); the Bedrock/Strands version replaces it in aws mode.
   It is invoked per person with only that person's input, and never sees other answers.
 """
+import json
+import logging
 import os
 import re
+import time
 from typing import Any
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from pydantic import BaseModel, Field
+
+from .. import config
+from ..engine import care, everyday
+from . import prompts
+
+log = logging.getLogger("huddle.agent")
 
 TOOLS = {"start_huddle", "submit_private_answer", "get_group_result", "close_round", "nudge_pending"}
 
@@ -34,9 +44,13 @@ async def call_tool(name: str, arguments: dict, url: str | None = None) -> dict[
 
 # ---- mock parser -----------------------------------------------------------------------------
 
-_WORDS = {w: i for i, w in enumerate(
+_ONES = {w: i for i, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen "
-    "sixteen seventeen eighteen nineteen twenty".split())}
+    "sixteen seventeen eighteen nineteen".split())}
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+         "eighty": 80, "ninety": 90}
+_WORDS = {**_ONES, **_TENS, "hundred": 100}
+_WORD_ALT = "|".join(sorted(_WORDS, key=len, reverse=True))
 _NEG = re.compile(r"\b(not|no|can'?t|cannot|won'?t|never|avoid|hate|dislike|without|nothing)\b", re.I)
 
 _EVERYDAY_WORDS = {
@@ -52,14 +66,35 @@ _CARE_WORDS = {
 }
 
 
-def _num(token: str) -> float | None:
-    token = token.lower().replace(",", "")
-    if re.fullmatch(r"\d+(\.\d+)?", token):
-        return float(token)
-    return float(_WORDS[token]) if token in _WORDS else None
+def _num(phrase: str) -> float | None:
+    """'600', '1,200', 'twelve', 'sixty five', 'six hundred', 'a hundred and fifty' -> number.
+
+    Returns None for phrases it cannot read (for example a bare 'hundred'), so the agent asks again
+    instead of guessing.
+    """
+    phrase = phrase.lower().replace(",", "").strip()
+    if re.fullmatch(r"\d+(\.\d+)?", phrase):
+        return float(phrase)
+    total, seen = 0, False
+    for w in re.split(r"[ -]+", phrase):
+        if w in ("and", "a"):
+            seen = seen or w == "a"
+        elif w == "hundred":
+            if total == 0 and not seen:
+                return None
+            total = max(total, 1) * 100
+            seen = True
+        elif w in _ONES or w in _TENS:
+            total += _ONES.get(w, _TENS.get(w, 0))
+            seen = True
+        else:
+            return None
+    return float(total)
 
 
-_NUMBER = r"(\d[\d,]*(?:\.\d+)?|" + "|".join(sorted(_WORDS, key=len, reverse=True)) + r")"
+# One number: digits, or number words ("sixty five", "a hundred and fifty"), on word boundaries.
+_NW = rf"\b(?:{_WORD_ALT})\b"
+_NUMBER = rf"(\d[\d,]*(?:\.\d+)?|(?:\ba\s+(?=hundred\b))?{_NW}(?:[ -]+(?:and[ -]+)?{_NW})*)"
 
 
 def _clauses(text: str) -> list[str]:
@@ -118,7 +153,101 @@ def _parse_care(text: str) -> dict:
     return {"draft": draft, "missing": missing, "followup": ask[missing[0]] if missing else None}
 
 
-def explain(result: dict) -> str:
-    """Two plain sentences about an aggregate result. Mock mode: derived from the result itself."""
-    # aws mode: replaced by the Strands agent on Bedrock (P5)
-    return result.get("tradeoff") or result.get("headline", "")
+# ---- aws mode: Strands Agents SDK on Amazon Bedrock ----------------------------------------------
+
+
+class AgentConfigError(RuntimeError):
+    pass
+
+
+class EverydayParse(BaseModel):
+    budget_ceiling: float | None = Field(default=None, ge=0, le=100000)
+    vibe: list[everyday.Vibe] = Field(default_factory=list)
+    must_haves: list[everyday.Vibe | everyday.Attr] = Field(default_factory=list)
+    dealbreakers: list[everyday.Attr] = Field(default_factory=list)
+    followup: str | None = Field(default=None, max_length=200)
+
+
+class CareParse(BaseModel):
+    hours_per_week: float | None = Field(default=None, ge=0, le=168)
+    dollars_per_month: float | None = Field(default=None, ge=0, le=100000)
+    dealbreakers: list[care.Dealbreaker] = Field(default_factory=list)
+    followup: str | None = Field(default=None, max_length=200)
+
+
+class Explanation(BaseModel):
+    text: str = Field(max_length=600)
+
+
+def _make_agent(system_prompt: str):
+    """A fresh Strands agent per call, so it carries no memory of anyone else's answers.
+
+    The model id comes from HUDDLE_BEDROCK_MODEL_ID: check the Bedrock model catalog for a current
+    id enabled in your account and region. Nothing is hard-coded on purpose.
+    """
+    model_id = os.environ.get("HUDDLE_BEDROCK_MODEL_ID")
+    if not model_id:
+        raise AgentConfigError("Set HUDDLE_BEDROCK_MODEL_ID to a Bedrock model id enabled in your account.")
+    from strands import Agent
+    from strands.models import BedrockModel
+
+    model = BedrockModel(model_id=model_id, region_name=os.environ.get("AWS_REGION"), temperature=0.0)
+    return Agent(model=model, system_prompt=system_prompt, callback_handler=None)
+
+
+def _structured(agent, prompt: str, model_cls: type[BaseModel]) -> BaseModel:
+    out = agent(prompt, structured_output_model=model_cls).structured_output
+    if not isinstance(out, model_cls):
+        raise ValueError("model returned no structured output")
+    return out
+
+
+def _bedrock_parse(mode: str, text: str) -> dict:
+    cls = CareParse if mode == "care" else EverydayParse
+    out = _structured(_make_agent(prompts.PARSE_SYSTEM), f"Mode: {mode}\nThe person said: {text}", cls)
+    draft = out.model_dump(exclude={"followup"})
+    required = ("hours_per_week", "dollars_per_month") if mode == "care" else ("budget_ceiling",)
+    missing = [k for k in required if draft[k] is None]  # recomputed here, never trusted from the model
+    fallback = parse_utterance(mode, text)["followup"]
+    return {"draft": draft, "missing": missing, "followup": (out.followup or fallback) if missing else None}
+
+
+def parse_with_engine(mode: str, text: str) -> dict:
+    """Parse one person's words. Adds `engine` and `latency_ms`; Bedrock failures fall back to mock."""
+    start = time.perf_counter()
+    engine, error = "mock", None
+    if config.MODE == "aws":
+        try:
+            out = _bedrock_parse(mode, text)
+            engine = "bedrock"
+        except Exception as e:  # noqa: BLE001  any Bedrock/credential failure falls back to mock
+            error = f"{type(e).__name__}: {e}"[:200]
+            log.warning("bedrock parse failed, using mock parser: %s", error)
+            out, engine = parse_utterance(mode, text), "mock-fallback"
+    else:
+        out = parse_utterance(mode, text)
+    out = {**out, "engine": engine, "latency_ms": round((time.perf_counter() - start) * 1000)}
+    if error:
+        out["engine_error"] = error
+    log.info("parse engine=%s latency_ms=%s", engine, out["latency_ms"])
+    return out
+
+
+def explain(result: dict) -> dict:
+    """Two plain sentences about an AGGREGATE result; the agent never sees raw answers."""
+    start = time.perf_counter()
+    engine, error, text = "mock", None, result.get("tradeoff") or result.get("headline", "")
+    if config.MODE == "aws":
+        try:
+            prompt = "Explain this group result:\n" + json.dumps(
+                {k: result[k] for k in result if k not in {"honest_limits"}})
+            text = _structured(_make_agent(prompts.EXPLAIN_SYSTEM), prompt, Explanation).text
+            engine = "bedrock"
+        except Exception as e:  # noqa: BLE001
+            error = f"{type(e).__name__}: {e}"[:200]
+            log.warning("bedrock explain failed, using mock text: %s", error)
+            engine = "mock-fallback"
+    out = {"text": text, "engine": engine, "latency_ms": round((time.perf_counter() - start) * 1000)}
+    if error:
+        out["engine_error"] = error
+    return out

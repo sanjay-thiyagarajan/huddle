@@ -22,7 +22,7 @@ BUCKETS = {n: [privacy.money_bucket(EVERYDAY[n]), privacy.hours_bucket(CARE_HOUR
 # Routes/tools exercised below; the meta-test fails if a new one is added without coverage.
 COVERED_ROUTES = {"/api/health", "/api/rounds", "/api/status", "/api/answers", "/me/answers",
                   "/api/result", "/api/close", "/api/nudge", "/api/server-holds",
-                  "/api/agent/tool", "/api/agent/parse"}
+                  "/api/agent/tool", "/api/agent/parse", "/api/agent/explain"}
 # Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
 VOICE_ROUTES = {"/api/voice/enrol", "/api/voice/identify", "/api/voice/transcribe",
                 "/api/voice/profiles", "/api/voice/profiles/{name}"}
@@ -144,5 +144,9 @@ async def test_leak_agent_routes(live_server):
             for tool in ("get_group_result", "nudge_pending", "close_round"):
                 resp = await c.post("/api/agent/tool", json={"name": tool, "arguments": {"token": tok}})
                 _check(f"agent {tool}", resp.text, viewer)
+        for viewer, tok in toks.items():  # round is closed now: the explanation is aggregate-only
+            resp = await c.get("/api/agent/explain", params={"token": tok})
+            assert resp.status_code == 200
+            _check("agent explain", resp.text, viewer)
         bad = await c.post("/api/agent/tool", json={"name": "dump_db", "arguments": {}})
         assert bad.status_code == 400

@@ -4,7 +4,7 @@ A private group-decision agent. It asks each person privately (voice at home, a 
 
 Built for the [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/) (primary track: Alexa+; mini-challenges: AWS Builder, Open Source). New project, started after Aug 31, 2026.
 
-**Status:** P0-P3 done, plus the P7 items that need no outside input (Playwright E2E, accessibility audit, Docker) (engine, MCP server, care mode, simulator and link flow, mock mode). P4 built and measured on synthetic voices only (see [docs/voice-accuracy.md](docs/voice-accuracy.md)); not yet built: Bedrock/Strands/AgentCore (P5), real-voice and real-group tests (P4/P6). See [docs/development-plan.md](docs/development-plan.md).
+**Status:** P0-P3 done, plus the P7 items that need no outside input (Playwright E2E, accessibility audit, Docker) (engine, MCP server, care mode, simulator and link flow, mock mode). P4 built and measured on synthetic voices only (see [docs/voice-accuracy.md](docs/voice-accuracy.md)); P5 code written but **never run against AWS** (no credentials yet); real-voice and real-group tests (P4/P6) still to do. See [docs/development-plan.md](docs/development-plan.md).
 
 ## Quickstart (mock mode, no AWS credentials)
 
@@ -23,6 +23,10 @@ make docker  # or: docker compose up --build  -> http://localhost:8000
 - `server/engine/`: `privacy.py` (buckets, k rule, leak guard), `rounds.py` (lifecycle: collecting, reminded, closed, with defaults for non-responders), `everyday.py`, `care.py` (integer task split via `scipy.optimize.milp`).
 - Private answers are stored server-side and returned only to their owner (`GET /me/answers`).
 - `tests/test_leak.py` seeds distinctive values and calls every REST route and MCP tool as every participant; it fails if another person's value (or their bucket next to their name) appears. `tests/e2e_mock_demo.py` runs a scripted care round against a live server.
+
+## aws mode (written, not yet run against AWS)
+
+`HUDDLE_MODE=aws HUDDLE_BEDROCK_MODEL_ID=<id> AWS_REGION=<region>` with `pip install '.[aws]'` switches the agent to Strands on Amazon Bedrock. A fresh agent handles each person's words alone, output is validated by Pydantic, and any failure falls back to the mock parser with `engine: "mock-fallback"`. `scripts/aws_scripted_rounds.py --require-bedrock` runs both demo rounds and fails if Bedrock was not used. AgentCore hosting notes (untested): [deploy/agentcore/README.md](deploy/agentcore/README.md).
 
 ## Honest limits
 

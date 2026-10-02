@@ -11,5 +11,6 @@
 | PyTorch, torchaudio, soundfile | Audio and model runtime (optional) | BSD-3 / BSD-3 / BSD-3 |
 | faster-whisper, Whisper `base.en` (CTranslate2) | Local transcription fallback (optional) | MIT / MIT |
 | macOS `say` voices | Generate the synthetic test clips in `tests/audio` (not redistributed as a voice) | Apple system TTS |
+| Strands Agents SDK, boto3 | Agent in `aws` mode (optional `aws` extra); wired and unit-tested, not yet run against Bedrock | Apache-2.0 |
 
-Planned (not yet used): Strands Agents SDK, Amazon Bedrock, Bedrock AgentCore.
+Planned (not yet run): Amazon Bedrock, Bedrock AgentCore Runtime.

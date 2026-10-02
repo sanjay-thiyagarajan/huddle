@@ -138,10 +138,11 @@ def test_dropping_or_keeping_both_and_dropping_the_existing(session, tok):
     assert len(mytime(session, tok, "Maya")["items"]) == 1
     both = add(session, tok, "Maya", clash, {"choice": "keep_both"})
     assert both["created"] is True and len(mytime(session, tok, "Maya")["conflicts"]) == 1
-    swapped = add(session, tok, "Maya", f("Film", "personal", 8, 19), {"choice": "drop_existing"})
+    add(session, tok, "Maya", f("Book club 2", "friends", 9, 19))
+    swapped = add(session, tok, "Maya", f("Film", "personal", 9, 19), {"choice": "drop_existing"})
     assert swapped["created"] is True
     titles = {i["title"] for i in mytime(session, tok, "Maya")["items"]}
-    assert "Film" in titles and "Book club" not in titles
+    assert "Film" in titles and "Book club 2" not in titles
 
 
 def test_moving_an_existing_flexible_commitment(session, tok):

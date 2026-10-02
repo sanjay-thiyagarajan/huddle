@@ -38,6 +38,12 @@ class Answer(SQLModel, table=True):
     created_at: NaiveDatetime
 
 
+class VoiceProfile(SQLModel, table=True):
+    """Biometric stand-in data: enrolment embeddings per household profile (never raw audio)."""
+    name: str = Field(primary_key=True)
+    embeddings: list = Field(default_factory=list, sa_column=Column(JSON))
+
+
 def init_db(url: str | None = None):
     """(Re)create the engine. In-memory URLs share one connection so tests can reset cheaply."""
     global _engine

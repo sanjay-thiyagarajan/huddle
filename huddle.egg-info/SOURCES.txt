@@ -8,6 +8,7 @@ huddle.egg-info/requires.txt
 huddle.egg-info/top_level.txt
 server/__init__.py
 server/api.py
+server/config.py
 server/db.py
 server/mcp_server.py
 server/agent/__init__.py
@@ -21,3 +22,8 @@ server/engine/rounds.py
 server/voice/__init__.py
 server/voice/speaker_id.py
 server/voice/stt.py
+tests/test_care.py
+tests/test_leak.py
+tests/test_mcp.py
+tests/test_privacy.py
+tests/test_rounds.py

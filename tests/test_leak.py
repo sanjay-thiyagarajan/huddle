@@ -23,6 +23,9 @@ BUCKETS = {n: [privacy.money_bucket(EVERYDAY[n]), privacy.hours_bucket(CARE_HOUR
 COVERED_ROUTES = {"/api/health", "/api/rounds", "/api/status", "/api/answers", "/me/answers",
                   "/api/result", "/api/close", "/api/nudge", "/api/server-holds",
                   "/api/agent/tool", "/api/agent/parse"}
+# Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
+VOICE_ROUTES = {"/api/voice/enrol", "/api/voice/identify", "/api/voice/transcribe",
+                "/api/voice/profiles", "/api/voice/profiles/{name}"}
 COVERED_TOOLS = {"start_huddle", "submit_private_answer", "get_group_result", "close_round",
                  "nudge_pending"}
 
@@ -49,7 +52,7 @@ def _check(label, body, viewer):
 
 def test_every_rest_route_is_covered():
     paths = {r.path for r in api.app.routes if getattr(r, "path", "").startswith(("/api", "/me"))}
-    assert paths == COVERED_ROUTES
+    assert paths == COVERED_ROUTES | VOICE_ROUTES
 
 
 @pytest.mark.parametrize("mode,make_answer,own_marker", MODE_CASES)

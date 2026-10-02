@@ -6,13 +6,14 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from . import config
 from .agent import huddle_agent
-from .db import get_session, init_db
+from .db import VoiceProfile, get_session, init_db
 from .engine import rounds
 from .mcp_server import mcp
+from .voice import speaker_id, stt
 
 
 def _session():
@@ -121,6 +122,77 @@ def agent_parse(body: ParseIn, s: Session = Depends(_session)):
     """Turn one person's words into a draft answer. Nothing is stored until they confirm."""
     mode = rounds.status(s, body.token)["mode"]
     return huddle_agent.parse_utterance(mode, body.text)
+
+
+# ---- voice: speaker ID is a stand-in for Alexa person recognition, not security ----------------
+
+MAX_AUDIO = 5_000_000
+
+
+async def _audio(request: Request) -> bytes:
+    data = await request.body()
+    if not data or len(data) > MAX_AUDIO:
+        raise rounds.HuddleError("bad_audio", "Send one WAV recording under 5 MB.")
+    return data
+
+
+def _voice(fn, *args):
+    try:
+        return fn(*args)
+    except speaker_id.VoiceUnavailable as e:
+        raise rounds.HuddleError("voice_unavailable", f"{e} The profile switcher still works.", 501) from None
+    except ValueError as e:
+        raise rounds.HuddleError("bad_audio", str(e)) from None
+
+
+@app.post("/api/voice/enrol")
+async def voice_enrol(name: str, request: Request, s: Session = Depends(_session)):
+    """Add one enrolment clip (WAV) to a profile. Only the embedding is kept, not the audio."""
+    vec = _voice(speaker_id.embed, await _audio(request))
+    prof = s.get(VoiceProfile, name) or VoiceProfile(name=name, embeddings=[])
+    prof.embeddings = [*prof.embeddings, vec.tolist()]
+    s.add(prof)
+    s.commit()
+    return {"name": name, "clips": len(prof.embeddings)}
+
+
+@app.post("/api/voice/identify")
+async def voice_identify(request: Request, s: Session = Depends(_session)):
+    """Who is speaking? Returns the best profile only when it clears the threshold."""
+    import numpy as np
+
+    vec = _voice(speaker_id.embed, await _audio(request))
+    profiles = {p.name: speaker_id.enrol_profile([np.array(e) for e in p.embeddings])
+                for p in s.exec(select(VoiceProfile)) if p.embeddings}
+    name, score = speaker_id.identify(vec, profiles)
+    return {"recognized": name is not None, "name": name, "score": round(score, 2),
+            "note": "Voice ID separates profiles; it is not security."}
+
+
+@app.post("/api/voice/transcribe")
+async def voice_transcribe(request: Request):
+    """Local Whisper fallback for browsers without the Web Speech API."""
+    import tempfile
+
+    data = await _audio(request)
+    with tempfile.NamedTemporaryFile(suffix=".wav") as f:
+        f.write(data)
+        f.flush()
+        return {"text": _voice(stt.transcribe, f.name)}
+
+
+@app.get("/api/voice/profiles")
+def voice_profiles(s: Session = Depends(_session)):
+    return {"enrolled": sorted(p.name for p in s.exec(select(VoiceProfile)))}
+
+
+@app.delete("/api/voice/profiles/{name}")
+def voice_forget(name: str, s: Session = Depends(_session)):
+    prof = s.get(VoiceProfile, name)
+    if prof:
+        s.delete(prof)
+        s.commit()
+    return {"forgotten": name}
 
 
 # Built simulator (web/dist), when present. In dev, Vite serves it and proxies /api and /mcp here.

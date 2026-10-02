@@ -46,3 +46,12 @@ Format per entry: task attempted, steps taken, expected vs actual, severity, wor
 - **Severity:** Medium (blocked the visual check until the extension was connected; resolved later in the session).
 - **Workaround:** Scripted API round in `tests/e2e_mock_demo.py` meanwhile; once the extension connected, the UI was checked by hand in Chrome.
 - **Suggestion:** Have the tool report which of "not installed", "not logged in" or "needs restart" applies.
+
+## F-006: faster-whisper cannot decode audio files with the PyAV that pip resolves
+- **Task attempted:** Transcribe a local 16 kHz WAV with `faster-whisper` (`base.en`, int8) as the server-side speech-to-text fallback.
+- **Steps taken:** `pip install faster-whisper` alongside speechbrain/torch, then `WhisperModel(...).transcribe("clip.wav")`.
+- **Expected:** A transcript.
+- **Actual:** `TypeError: open() got an unexpected keyword argument 'metadata_errors'` raised from `av.container.core.open`, i.e. faster-whisper passes an option the installed PyAV does not support. The failure appears after the model has already downloaded, so the first run wastes minutes.
+- **Severity:** Medium.
+- **Workaround:** Decode the WAV ourselves (soundfile, resample to 16 kHz) and pass the float32 array to `transcribe()`, which skips PyAV.
+- **Suggestion:** faster-whisper should declare a minimum `av` version that supports `metadata_errors`, so pip resolves a compatible pair.

@@ -3,6 +3,7 @@ import AnswerForm from "../AnswerForm";
 import { api, listen, speechSupported, tool } from "../api";
 import type { Channel, Holds, Mode, Person, Result, Status } from "../api";
 import Reveal from "../reveal/Reveal";
+import { ENROL_PHRASES, enrolVoice, identifyVoice, recordWav } from "../voice";
 
 const PRESETS: Record<Mode, { name: string; channel: Channel }[]> = {
   everyday: [{ name: "Maya", channel: "voice" }, { name: "Ben", channel: "voice" }],
@@ -28,6 +29,7 @@ export default function Simulator() {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
+  const [voiceMsg, setVoiceMsg] = useState<string | null>(null);
 
   const host = round?.find((p) => p.is_host);
 
@@ -78,6 +80,25 @@ export default function Simulator() {
     const r = await tool<{ result?: Result }>("close_round", { token: host.token });
     if (r.result) setResult(r.result);
     void refresh();
+  }
+  async function enrol(name: string) {
+    try {
+      for (const [i, phrase] of ENROL_PHRASES.entries()) {
+        setVoiceMsg(`${name}, say ${i + 1} of ${ENROL_PHRASES.length}: "${phrase}"`);
+        await enrolVoice(name, await recordWav(4000));
+      }
+      setVoiceMsg(`${name}'s voice profile is saved on this machine.`);
+    } catch (e) { setVoiceMsg((e as Error).message); }
+  }
+  async function whoIsSpeaking() {
+    try {
+      setVoiceMsg("Listening for a few seconds");
+      const r = await identifyVoice(await recordWav(4000));
+      if (r.recognized && r.name && round?.some((p) => p.name === r.name)) {
+        setActive(r.name);
+        setVoiceMsg(`Recognized ${r.name}.`);
+      } else setVoiceMsg("Not sure who that was. Pick a profile below.");
+    } catch (e) { setVoiceMsg((e as Error).message); }
   }
   function reset() { setRound(null); setStatus(null); setResult(null); setHolds(null); setNote(null); }
 
@@ -156,6 +177,16 @@ export default function Simulator() {
                 {holds.stored.map((h) => <li key={h.name}>{h.name}: {h.has_answer ? "answer stored" : "nothing yet"}<span>{h.value}</span></li>)}
               </ul>
             )}
+            <details className="voicebox">
+              <summary>Voice recognition setup</summary>
+              <p className="fine">Optional stand-in for Alexa person recognition. It separates profiles and is not security. Only a voice fingerprint is kept, not the recording.</p>
+              <div className="row">
+                {round.filter((p) => p.channel === "voice").map((p) => (
+                  <button key={p.name} className="ghost" onClick={() => void enrol(p.name)}>Enrol {p.name}</button>
+                ))}
+              </div>
+              {voiceMsg && <p role="status">{voiceMsg}</p>}
+            </details>
             <button className="ghost" onClick={reset}>Start over</button>
           </div>
         )}
@@ -177,6 +208,7 @@ export default function Simulator() {
             <div className="recognized" role="group" aria-label="Who is speaking">
               <span>Recognized: <strong>{active}</strong></span>
               <span className="fine">Profile switcher stands in for voice recognition. It separates profiles; it is not security.</span>
+              <button className="ghost" onClick={() => void whoIsSpeaking()}>Who's speaking? Listen</button>
               <div className="modes">
                 {round.map((p) => (
                   <button key={p.name} className="chip" aria-pressed={p.name === active} onClick={() => setActive(p.name)}>

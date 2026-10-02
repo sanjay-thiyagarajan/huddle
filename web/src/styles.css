@@ -77,3 +77,5 @@ button, .ghost { font: inherit; cursor: pointer; border-radius: 8px; padding: .5
 .options li { margin-bottom: .4rem; max-width: 62ch; }
 .solo { max-width: 40rem; margin: 0 auto; padding: 2rem 1rem 4rem; } .solo h1 { font-size: 2rem; }
 @media (max-width: 560px) { .who { grid-template-columns: 1fr; } }
+.voicebox { margin: .75rem 0; } .voicebox summary { cursor: pointer; font-weight: 600; margin-bottom: .5rem; }
+.recognized > .ghost { margin-bottom: .75rem; }

@@ -38,3 +38,4 @@ include = ["server*"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/voice_eval.py" = ["E501"]  # long lines are report prose
+"server/agent/dialogue.py" = ["E501"]  # long lines are spoken prose

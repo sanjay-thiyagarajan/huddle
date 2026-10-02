@@ -23,7 +23,7 @@ BUCKETS = {n: [privacy.money_bucket(EVERYDAY[n]), privacy.hours_bucket(CARE_HOUR
 COVERED_ROUTES = {"/api/health", "/api/rounds", "/api/status", "/api/answers", "/me/answers",
                   "/api/result", "/api/close", "/api/nudge", "/api/server-holds",
                   "/api/agent/tool", "/api/agent/parse", "/api/agent/explain", "/api/checkin",
-                  "/api/plan-card", "/api/household"}
+                  "/api/plan-card", "/api/household", "/api/agent/turn"}
 # Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
 VOICE_ROUTES = {"/api/voice/enrol", "/api/voice/identify", "/api/voice/transcribe",
                 "/api/voice/profiles", "/api/voice/profiles/{name}"}
@@ -198,3 +198,42 @@ async def test_leak_two_round_care_chain_and_fairness(session):
                 _check(f"chain {fn.__name__}", body, viewer)
     result = rounds.get_result(session, toks2["Ben"], t0)["result"]
     assert result["fairness"] and result["fairness"]["plans"] == 2
+
+
+async def test_leak_voice_turns_never_echo_any_value_and_sessions_are_private(live_server):
+    """Every reply from the voice-only dialogue, for every participant, contains no one's value,
+    not even the speaker's own (the draft stays server-side). A session cannot be used by another token."""
+    async with httpx.AsyncClient(base_url=live_server, timeout=30) as c:
+        r = (await c.post("/api/agent/tool", json={"name": "start_huddle", "arguments": {
+            "mode": "care", "participants": [{"name": n} for n in EVERYDAY]}})).json()
+        toks = {p["name"]: p["token"] for p in r["participants"]}
+        sessions = {}
+        for name, tok in toks.items():
+            turns = [{"token": tok}]  # first call opens the session
+            first = (await c.post("/api/agent/turn", json=turns[0])).json()
+            sid = sessions[name] = first["session_id"]
+            replies = [first]
+            for words in ("just me", "yes I agree",
+                          f"I can do {CARE_HOURS[name]} hours but not nights",
+                          f"{CARE_DOLLARS[name]} dollars a month", "save it"):
+                payload = {"token": tok, "session_id": sid, "utterance": words}
+                replies.append((await c.post("/api/agent/turn", json=payload)).json())
+            for reply in replies:
+                body = json.dumps(reply)
+                for who, values in SENTINELS.items():
+                    for v in [*values, CARE_DOLLARS[who], CARE_HOURS[who]]:
+                        assert str(v) not in body, f"voice reply to {name} contained {who}'s {v}: {body}"
+            assert replies[-1]["saved"] is True and replies[-1]["stage"] == "saved"
+        # The answers really were stored (through MCP), and only the owner can read each
+        for name, tok in toks.items():
+            mine = (await c.get("/me/answers", params={"token": tok})).json()
+            assert mine["answered"] and mine["answer"]["hours_per_week"] == CARE_HOURS[name]
+
+        # A voice session belongs to one token
+        fresh = (await c.post("/api/agent/tool", json={"name": "start_huddle", "arguments": {
+            "mode": "care", "participants": [{"name": "Maya"}, {"name": "Ben"}]}})).json()
+        ft = {p["name"]: p["token"] for p in fresh["participants"]}
+        other = (await c.post("/api/agent/turn", json={"token": ft["Maya"]})).json()
+        stolen = await c.post("/api/agent/turn", json={
+            "token": ft["Ben"], "session_id": other["session_id"], "utterance": "just me"})
+        assert stolen.status_code == 410 and stolen.json()["error"] == "voice_session"

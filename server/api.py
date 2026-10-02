@@ -7,9 +7,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
+from starlette.concurrency import run_in_threadpool
 
 from . import config
-from .agent import huddle_agent
+from .agent import dialogue, huddle_agent
 from .db import VoiceProfile, get_session, init_db
 from .engine import rounds
 from .mcp_server import mcp
@@ -143,6 +144,41 @@ def agent_parse(body: ParseIn, s: Session = Depends(_session)):
     """Turn one person's words into a draft answer. Nothing is stored until they confirm."""
     mode = rounds.status(s, body.token)["mode"]
     return huddle_agent.parse_with_engine(mode, body.text)
+
+
+class VoiceTurnIn(BaseModel):
+    token: str
+    session_id: str | None = None
+    utterance: str = Field(default="", max_length=500)
+
+
+@app.post("/api/agent/turn")
+async def agent_turn(body: VoiceTurnIn, s: Session = Depends(_session)):
+    """One turn of the voice-only conversation. The reply is what the assistant SAYS: it never contains
+    the person's private values (unless they ask for a read-back). The draft stays server-side and is
+    saved through the MCP tool, so a screen showing this reply cannot reveal an answer."""
+    info = rounds.status(s, body.token)
+    if info["state"] == "closed":
+        raise rounds.HuddleError("round_closed", "This round is closed.", 409)
+    try:
+        if body.session_id is None:
+            sid, turn = dialogue.open_session(body.token, info["mode"], info["me"]["name"],
+                                              huddle_agent.parse_with_engine)
+        else:
+            sid = body.session_id
+            turn = await run_in_threadpool(dialogue.take_turn, sid, body.token, body.utterance)
+    except dialogue.DialogueError as e:
+        raise rounds.HuddleError("voice_session", str(e), 410) from None
+    saved = False
+    if turn.submit is not None:
+        out = await huddle_agent.call_tool("submit_private_answer",
+                                           {"token": body.token, "answer": turn.submit})
+        saved = "error" not in out
+        if not saved:
+            turn = dialogue.Turn("Sorry, I couldn't save that. Let's use the screen instead.", "handoff",
+                                 done=True, handoff="screen")
+    return {"session_id": sid, "say": turn.say, "stage": turn.stage, "done": turn.done,
+            "handoff": turn.handoff, "spoke_values": turn.spoke_values, "saved": saved}
 
 
 @app.get("/api/agent/explain")

@@ -60,7 +60,9 @@ AnswerModel = EverydayAnswer
 
 
 def compute(named_answers: list[tuple[str, dict]], need: dict | None = None,
-            defaults_applied: bool = False) -> dict:
+            defaults_applied: bool = False, options: list[dict] | None = None,
+            mode: str = "everyday") -> dict:
+    options = options or OPTIONS
     answers = [a for _, a in named_answers]  # names are deliberately dropped here
     n = len(answers)
     policy = privacy.reveal_policy(n)
@@ -74,7 +76,7 @@ def compute(named_answers: list[tuple[str, dict]], need: dict | None = None,
             return "dealbreaker"
         return None
 
-    ranked = sorted(OPTIONS, key=lambda o: (-_score(o, answers), o["price"]))
+    ranked = sorted(options, key=lambda o: (-_score(o, answers), o["price"]))
     feasible = [o for o in ranked if reason(o) is None]
     wanted = ranked[0]
     chosen = feasible[0] if feasible else None
@@ -93,7 +95,7 @@ def compute(named_answers: list[tuple[str, dict]], need: dict | None = None,
         tradeoff = f"Picked {chosen['name']}; {who} preferred {wanted['name']}, but {ruled} ruled it out."
 
     return {
-        "mode": "everyday",
+        "mode": mode,
         "plan": None if chosen is None else {
             "id": chosen["id"], "name": chosen["name"],
             "price_band": privacy.money_bucket(chosen["price"]),

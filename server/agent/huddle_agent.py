@@ -17,12 +17,13 @@ from mcp.client.streamable_http import streamable_http_client
 from pydantic import BaseModel, Field
 
 from .. import config
-from ..engine import care, everyday
+from ..engine import care, everyday, trip
 from . import prompts
 
 log = logging.getLogger("huddle.agent")
 
-TOOLS = {"start_huddle", "submit_private_answer", "get_group_result", "close_round", "nudge_pending"}
+TOOLS = {"start_huddle", "submit_private_answer", "get_group_result", "close_round", "nudge_pending",
+         "submit_checkin"}
 
 
 def mcp_url() -> str:
@@ -59,6 +60,14 @@ _EVERYDAY_WORDS = {
     "active": r"active|sport", "relaxed": r"relax|chill|easy", "foodie": r"food|eat|brunch|dinner",
     "cultural": r"museum|culture|art", "social": r"social|friends|group", "adventurous": r"advent|thrill",
 }
+_TRIP_WORDS = {
+    "flights": r"flight|fly|plane", "camping": r"camp|tent", "long_drive": r"long drive|far drive",
+    "early_start": r"early", "strenuous": r"strenuous|hard hik|intense",
+    "nightlife": r"nightlife|clubs?|party",
+    "beach": r"beach|coast|sea", "city": r"city|urban", "nature": r"nature|mountain|lake|hik",
+    "foodie": r"food|eat|restaurant", "relaxed": r"relax|chill|easy", "adventurous": r"advent|thrill",
+}
+_TRIP_NEGATABLE = {"flights", "camping", "long_drive", "early_start", "strenuous", "nightlife"}
 _CARE_WORDS = {
     "nights": r"night|overnight", "transport": r"transport|driv", "appointments": r"appointment",
     "finances": r"financ|paperwork|bills", "checkins": r"check-?in|phone call|calls",
@@ -105,10 +114,13 @@ def parse_utterance(mode: str, text: str) -> dict:
     """Return {draft, missing, followup}. Negated clauses become dealbreakers, others preferences."""
     if mode == "care":
         return _parse_care(text)
+    if mode == "trip":
+        return _parse_everyday(text, _TRIP_WORDS, _TRIP_NEGATABLE, "for the whole trip")
     return _parse_everyday(text)
 
 
-def _parse_everyday(text: str) -> dict:
+def _parse_everyday(text: str, words: dict[str, str] | None = None, negatable: set[str] | None = None,
+                    unit: str = "per person") -> dict:
     draft: dict = {"budget_ceiling": None, "vibe": [], "must_haves": [], "dealbreakers": []}
     pattern = (rf"\$\s*{_NUMBER}|{_NUMBER}\s*(?:dollars|bucks)"
                rf"|(?:under|up to|max|budget(?: of)?)\s*\$?{_NUMBER}")
@@ -117,9 +129,10 @@ def _parse_everyday(text: str) -> dict:
         draft["budget_ceiling"] = _num(next(g for g in m.groups() if g))
     for clause in _clauses(text):
         neg = bool(_NEG.search(clause))
-        for key, pat in _EVERYDAY_WORDS.items():
+        for key, pat in (words or _EVERYDAY_WORDS).items():
             if re.search(pat, clause, re.I):
-                if neg and key in {"outdoors", "crowds", "long_drive", "early_start", "physical", "alcohol"}:
+                if neg and key in (negatable or {"outdoors", "crowds", "long_drive", "early_start",
+                                                 "physical", "alcohol"}):
                     draft["dealbreakers"].append(key)
                 elif not neg:
                     (draft["must_haves"] if re.search(r"must|need|have to", clause, re.I)
@@ -128,7 +141,7 @@ def _parse_everyday(text: str) -> dict:
         draft[k] = list(dict.fromkeys(draft[k]))
     missing = [] if draft["budget_ceiling"] is not None else ["budget_ceiling"]
     return {"draft": draft, "missing": missing,
-            "followup": "What's the most you'd comfortably spend per person?" if missing else None}
+            "followup": f"What's the most you'd comfortably spend {unit}?" if missing else None}
 
 
 def _parse_care(text: str) -> dict:
@@ -168,6 +181,14 @@ class EverydayParse(BaseModel):
     followup: str | None = Field(default=None, max_length=200)
 
 
+class TripParse(BaseModel):
+    budget_ceiling: float | None = Field(default=None, ge=0, le=100000)
+    vibe: list[trip.Vibe] = Field(default_factory=list)
+    must_haves: list[trip.Vibe | trip.Attr] = Field(default_factory=list)
+    dealbreakers: list[trip.Attr] = Field(default_factory=list)
+    followup: str | None = Field(default=None, max_length=200)
+
+
 class CareParse(BaseModel):
     hours_per_week: float | None = Field(default=None, ge=0, le=168)
     dollars_per_month: float | None = Field(default=None, ge=0, le=100000)
@@ -203,7 +224,7 @@ def _structured(agent, prompt: str, model_cls: type[BaseModel]) -> BaseModel:
 
 
 def _bedrock_parse(mode: str, text: str) -> dict:
-    cls = CareParse if mode == "care" else EverydayParse
+    cls = {"care": CareParse, "trip": TripParse}.get(mode, EverydayParse)
     out = _structured(_make_agent(prompts.PARSE_SYSTEM), f"Mode: {mode}\nThe person said: {text}", cls)
     draft = out.model_dump(exclude={"followup"})
     required = ("hours_per_week", "dollars_per_month") if mode == "care" else ("budget_ceiling",)

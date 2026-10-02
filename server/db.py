@@ -38,6 +38,24 @@ class Answer(SQLModel, table=True):
     created_at: NaiveDatetime
 
 
+class Event(SQLModel, table=True):
+    """Value-free audit trail: who did what when, never what they answered."""
+    id: int | None = Field(default=None, primary_key=True)
+    round_id: str = Field(index=True)
+    at: NaiveDatetime
+    kind: str  # opened | answered | reminded | closed | checked_in
+    actor: str | None = None
+    detail: str | None = None
+
+
+class Checkin(SQLModel, table=True):
+    """Day-after check-in: one private 1-5 comfort score per participant."""
+    participant_id: str = Field(primary_key=True)
+    round_id: str = Field(index=True)
+    score: int
+    created_at: NaiveDatetime
+
+
 class VoiceProfile(SQLModel, table=True):
     """Biometric stand-in data: enrolment embeddings per household profile (never raw audio)."""
     name: str = Field(primary_key=True)

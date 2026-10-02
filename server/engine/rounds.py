@@ -13,10 +13,10 @@ from pydantic import ValidationError
 from sqlmodel import Session, select
 
 from .. import config
-from ..db import Answer, Participant, Round
-from . import care, everyday, privacy
+from ..db import Answer, Checkin, Event, Participant, Round
+from . import care, everyday, privacy, trip
 
-MODES = {"everyday": everyday, "care": care}
+MODES = {"everyday": everyday, "care": care, "trip": trip}
 CHANNELS = ("voice", "link")
 
 
@@ -78,6 +78,12 @@ def _answers(s: Session, round_id: str) -> dict[str, Answer]:
     return {a.participant_id: a for a in s.exec(select(Answer).where(Answer.round_id == round_id))}
 
 
+def _log(s: Session, round_id: str, kind: str, now: datetime, actor: str | None = None,
+         detail: str | None = None) -> None:
+    """Append to the value-free audit trail (never records an answer)."""
+    s.add(Event(round_id=round_id, at=now, kind=kind, actor=actor, detail=detail))
+
+
 # ---- lifecycle --------------------------------------------------------------------------------
 
 def create_round(s: Session, mode: str, participants: list[dict], deadline_seconds: int = 3600,
@@ -111,6 +117,7 @@ def create_round(s: Session, mode: str, participants: list[dict], deadline_secon
         token = make_token(part.id, deadline + timedelta(days=1))
         out.append({"name": name, "channel": part.channel, "is_host": part.is_host,
                     "token": token, "link": f"/r/{token}"})
+    _log(s, rnd.id, "opened", now, actor=names[0], detail=f"{len(names)} people, {mode}")
     s.commit()
     return {"round_id": rnd.id, "mode": mode, "deadline_at": deadline.isoformat(),
             "participants": out}
@@ -122,15 +129,16 @@ def advance(s: Session, rnd: Round, now: datetime | None = None) -> Round:
     if rnd.state == "closed":
         return rnd
     if now >= rnd.deadline_at:
-        return _close(s, rnd)
+        return _close(s, rnd, now)
     if rnd.state == "collecting" and now >= rnd.reminder_at:
         rnd.state = "reminded"
         s.add(rnd)
+        _log(s, rnd.id, "reminded", now)
         s.commit()
     return rnd
 
 
-def _close(s: Session, rnd: Round) -> Round:
+def _close(s: Session, rnd: Round, now: datetime | None = None) -> Round:
     m = _mode(rnd.mode)
     parts = _participants(s, rnd.id)
     answers = _answers(s, rnd.id)
@@ -148,6 +156,8 @@ def _close(s: Session, rnd: Round) -> Round:
     rnd.defaults_applied = defaulted
     rnd.state = "closed"
     s.add(rnd)
+    _log(s, rnd.id, "closed", now or now_utc(),
+         detail="defaults applied for non-responders" if defaulted else "everyone answered")
     s.commit()
     return rnd
 
@@ -172,9 +182,10 @@ def submit_answer(s: Session, token: str, payload: dict, now: datetime | None = 
         msgs = "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors())
         raise HuddleError("invalid_answer", msgs) from None
     s.add(Answer(participant_id=p.id, round_id=rnd.id, data=data, created_at=now))
+    _log(s, rnd.id, "answered", now, actor=p.name)
     s.commit()
     if len(_answers(s, rnd.id)) == len(_participants(s, rnd.id)):
-        _close(s, rnd)
+        _close(s, rnd, now)
     return {"stored": True, "round_state": s.get(Round, rnd.id).state, "warnings": warnings}
 
 
@@ -200,6 +211,8 @@ def status(s: Session, token: str, now: datetime | None = None) -> dict:
         "participants": [{"name": q.name, "channel": q.channel, "answered": q.id in answers
                           and not answers[q.id].is_default} for q in parts],
         "options": getattr(_mode(rnd.mode), "OPTIONS", None),
+        "events": [{"at": e.at.isoformat(), "kind": e.kind, "actor": e.actor, "detail": e.detail}
+                   for e in s.exec(select(Event).where(Event.round_id == rnd.id).order_by(Event.id))],
     }
 
 
@@ -223,7 +236,7 @@ def close_round(s: Session, token: str, now: datetime | None = None) -> dict:
     if not p.is_host:
         raise HuddleError("host_only", "Only the host can close the round.", 403)
     if rnd.state != "closed":
-        _close(s, rnd)
+        _close(s, rnd, now)
     return get_result(s, token, now)
 
 
@@ -233,7 +246,45 @@ def get_result(s: Session, token: str, now: datetime | None = None) -> dict:
     rnd = advance(s, rnd, now)
     if rnd.state != "closed":
         return {"ready": False, "state": rnd.state}
-    return {"ready": True, "state": "closed", "result": rnd.result}
+    return {"ready": True, "state": "closed", "result": rnd.result,
+            "checkin": _checkin_summary(s, rnd)}
+
+
+def submit_checkin(s: Session, token: str, score: int, now: datetime | None = None) -> dict:
+    """Day-after check-in: how comfortable are you with the plan (1-5)? Private, single-use."""
+    now = now or now_utc()
+    p, rnd = _auth(s, token, now)
+    rnd = advance(s, rnd, now)
+    if rnd.state != "closed":
+        raise HuddleError("not_closed", "The check-in opens once the plan is decided.", 409)
+    if not isinstance(score, int) or isinstance(score, bool) or not 1 <= score <= 5:
+        raise HuddleError("invalid_score", "score must be a whole number from 1 to 5.")
+    if s.get(Checkin, p.id) is not None:
+        raise HuddleError("already_checked_in", "You already checked in.", 409)
+    s.add(Checkin(participant_id=p.id, round_id=rnd.id, score=score, created_at=now))
+    _log(s, rnd.id, "checked_in", now, actor=p.name)
+    s.commit()
+    return {"stored": True, "summary": _checkin_summary(s, rnd)}
+
+
+def _checkin_summary(s: Session, rnd: Round) -> dict:
+    """Unattributed. Shown only once everyone has checked in; never lists scores by name."""
+    n = len(_participants(s, rnd.id))
+    scores = [c.score for c in s.exec(select(Checkin).where(Checkin.round_id == rnd.id))]
+    out: dict = {"checked_in": len(scores), "of": n, "complete": len(scores) == n}
+    if not out["complete"]:
+        return out
+    policy = privacy.reveal_policy(n)
+    uncomfortable = any(x <= 2 for x in scores)
+    out["revisit"] = uncomfortable
+    out["message"] = ("At least one person is not comfortable with the plan. Talk it through and "
+                      "consider running a new round." if uncomfortable
+                      else "Everyone is comfortable with the plan.")
+    if policy.single_limit_detail:
+        out["comfortable_count"] = sum(1 for x in scores if x >= 4)
+    if policy.warning:
+        out["warning"] = policy.warning
+    return out
 
 
 def server_holds(s: Session, token: str, now: datetime | None = None) -> dict:

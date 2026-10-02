@@ -38,3 +38,12 @@ def test_missing_field_asks_one_followup():
     out = parse_utterance("care", "I live far away, can give 5 hours")
     assert out["missing"] == ["dollars_per_month"] and out["followup"]
     assert out["draft"]["dealbreakers"] == ["far_away"]
+
+
+def test_trip_vocabulary_and_whole_trip_budget():
+    out = parse_utterance("trip", "Up to $400 for the trip, I love the beach and good food, but no flights")
+    assert out["draft"]["budget_ceiling"] == 400
+    assert out["draft"]["dealbreakers"] == ["flights"]
+    assert set(out["draft"]["vibe"]) == {"beach", "foodie"}
+    out = parse_utterance("trip", "I like the mountains")
+    assert "whole trip" in out["followup"]

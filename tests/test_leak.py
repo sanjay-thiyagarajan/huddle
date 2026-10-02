@@ -22,12 +22,12 @@ BUCKETS = {n: [privacy.money_bucket(EVERYDAY[n]), privacy.hours_bucket(CARE_HOUR
 # Routes/tools exercised below; the meta-test fails if a new one is added without coverage.
 COVERED_ROUTES = {"/api/health", "/api/rounds", "/api/status", "/api/answers", "/me/answers",
                   "/api/result", "/api/close", "/api/nudge", "/api/server-holds",
-                  "/api/agent/tool", "/api/agent/parse", "/api/agent/explain"}
+                  "/api/agent/tool", "/api/agent/parse", "/api/agent/explain", "/api/checkin"}
 # Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
 VOICE_ROUTES = {"/api/voice/enrol", "/api/voice/identify", "/api/voice/transcribe",
                 "/api/voice/profiles", "/api/voice/profiles/{name}"}
 COVERED_TOOLS = {"start_huddle", "submit_private_answer", "get_group_result", "close_round",
-                 "nudge_pending"}
+                 "nudge_pending", "submit_checkin"}
 
 
 def _answer(v):
@@ -90,6 +90,16 @@ async def test_leak_rest_every_route_every_participant(fresh_db, mode, make_answ
                                                   "answer": make_answer("Chen")})
         _check("submit", resp.text, "Chen")
         await sweep("closed")
+        # Day-after check-ins: scores must never be attributed to a name in any response
+        for name, score in zip(toks, (5, 4, 2), strict=True):
+            resp = await c.post("/api/checkin", json={"token": toks[name], "score": score})
+            assert resp.status_code == 200, resp.text
+            _check("checkin", resp.text, name)
+        for viewer, tok in toks.items():
+            for path in ("/api/status", "/api/result"):
+                body = (await c.get(path, params={"token": tok})).text
+                _check(f"after checkin {path}", body, viewer)
+                assert "score" not in body, f"{path} exposes a score field"
         for viewer, tok in toks.items():
             resp = await c.post("/api/close", params={"token": tok})
             _check("close", resp.text, viewer)

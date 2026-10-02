@@ -74,6 +74,16 @@ def submit(body: AnswerIn, s: Session = Depends(_session)):
     return rounds.submit_answer(s, body.token, body.answer)
 
 
+class CheckinIn(BaseModel):
+    token: str
+    score: int
+
+
+@app.post("/api/checkin")
+def checkin(body: CheckinIn, s: Session = Depends(_session)):
+    return rounds.submit_checkin(s, body.token, body.score)
+
+
 @app.get("/me/answers")
 def me_answers(token: str, s: Session = Depends(_session)):
     return rounds.my_answers(s, token)

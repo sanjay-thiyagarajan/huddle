@@ -64,3 +64,10 @@ def close_round(token: str) -> dict[str, Any]:
 def nudge_pending(token: str) -> dict[str, Any]:
     """Host only: names of people who have not answered yet (never their values)."""
     return _run(rounds.nudge_pending, token)
+
+
+@mcp.tool()
+def submit_checkin(token: str, score: int) -> dict[str, Any]:
+    """Day-after check-in once the round is closed: how comfortable are you with the plan (1-5)?
+    Private and single-use. The group only ever sees an unattributed summary."""
+    return _run(rounds.submit_checkin, token, score)

@@ -19,7 +19,7 @@ async def test_protocol_version_tools_and_full_round(live_server):
 
             tools = {t.name for t in (await sess.list_tools()).tools}
             assert tools == {"start_huddle", "submit_private_answer", "get_group_result",
-                             "close_round", "nudge_pending"}
+                             "close_round", "nudge_pending", "submit_checkin"}
 
             r = (await sess.call_tool("start_huddle", {
                 "mode": "everyday", "participants": [

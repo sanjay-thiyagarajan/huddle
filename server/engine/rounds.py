@@ -24,9 +24,12 @@ from ..db import (
     Round,
     RoundHousehold,
 )
-from . import card, care, everyday, privacy, trip
+from . import card, care, everyday, privacy, trip, when
 
-MODES = {"everyday": everyday, "care": care, "trip": trip}
+MODES = {"everyday": everyday, "care": care, "trip": trip, "when": when}
+# Called after a round closes and its result is stored, for features that act on the outcome
+# (for example putting an agreed time on each attendee's private schedule).
+CLOSE_HOOKS: list = []
 CHANNELS = ("voice", "link")
 
 
@@ -101,8 +104,9 @@ def create_round(s: Session, mode: str, participants: list[dict], deadline_secon
                  household_id: str | None = None, detail: str | None = None) -> dict:
     now = now or now_utc()
     m = _mode(mode)
-    if not 2 <= len(participants) <= 6:
-        raise HuddleError("bad_participants", "A huddle needs 2 to 6 people.")
+    limit = getattr(m, "MAX_PEOPLE", 6)
+    if not 2 <= len(participants) <= limit:
+        raise HuddleError("bad_participants", f"A huddle needs 2 to {limit} people.")
     names = [str(p.get("name", "")).strip() for p in participants]
     if any(not n for n in names) or len({n.lower() for n in names}) != len(names):
         raise HuddleError("bad_participants", "Names must be non-empty and unique.")
@@ -181,6 +185,8 @@ def _close(s: Session, rnd: Round, now: datetime | None = None) -> Round:
     _log(s, rnd.id, "closed", now or now_utc(),
          detail="defaults applied for non-responders" if defaulted else "everyone answered")
     s.commit()
+    for hook in CLOSE_HOOKS:
+        hook(s, rnd)
     return rnd
 
 

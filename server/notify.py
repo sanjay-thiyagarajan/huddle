@@ -16,7 +16,7 @@ from email.message import EmailMessage
 
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{2,}$")
 
-_DECISION = {"care": "care", "everyday": "weekend", "trip": "trip"}
+_DECISION = {"care": "care", "everyday": "weekend", "trip": "trip", "when": "scheduling"}
 _KIND_LINE = {
     "first": "This is a gentle reminder.",
     "final": "The deadline is close.",
@@ -89,6 +89,10 @@ _HOME_LINES = {
     "decision": (
         "A family decision is waiting for your private answer: {title}. "
         "It takes about two minutes and nobody else sees it."
+    ),
+    "gathering": (
+        "Someone is finding a time for '{title}'. Your agent has suggested answers from your own schedule. "
+        "Have a look on your page."
     ),
     "nudge": "A request for '{title}' has been waiting. If you don't answer it will go to someone else.",
 }

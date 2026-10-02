@@ -199,6 +199,37 @@ class ParticipantMember(SQLModel, table=True):
     member_id: str = Field(index=True)
 
 
+class Commitment(SQLModel, table=True):
+    """One person's private commitment. Title and times are visible only to its owner."""
+    id: str = Field(primary_key=True)
+    member_id: str = Field(index=True)
+    title: str
+    circle: str  # family | friends | work | personal
+    start: NaiveDatetime
+    end: NaiveDatetime
+    flexibility: str = "movable"  # fixed | movable | optional
+    importance: int = 2
+    repeat: str = "none"  # none | daily | weekly
+    until: str | None = None  # ISO date a repeating series ends
+    skips: list = Field(default_factory=list, sa_column=Column(JSON))  # ISO dates of skipped occurrences
+    status: str = "active"  # active | tentative | cancelled
+    shared_round_id: str | None = None  # agreed with other people through a find-a-time
+    created_at: NaiveDatetime | None = None
+
+
+class ScheduleRule(SQLModel, table=True):
+    """PRIVATE: how this person wants conflicts handled. Owner-only."""
+    member_id: str = Field(primary_key=True)
+    circle_rank: list = Field(default_factory=list, sa_column=Column(JSON))
+    protected: list = Field(default_factory=list, sa_column=Column(JSON))  # [{days, start, end, label}]
+    work_start: str | None = None
+    work_end: str | None = None
+    max_evenings: int | None = None
+    buffer_minutes: int = 0
+    learned: dict = Field(default_factory=dict, sa_column=Column(JSON))  # how they have chosen before
+    updated_at: NaiveDatetime | None = None
+
+
 class VoiceProfile(SQLModel, table=True):
     """Biometric stand-in data: enrolment embeddings per household profile (never raw audio)."""
 

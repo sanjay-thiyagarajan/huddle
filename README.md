@@ -72,6 +72,10 @@ flowchart LR
 - Private answers are stored server-side and returned only to their owner (`GET /me/answers`). The audit trail records who did what and when, never what anyone answered.
 - Voice: browser Web Speech for transcription, optional local Whisper fallback, and optional SpeechBrain ECAPA speaker ID as a stand-in for Alexa person recognition.
 
+## On a shared speaker
+
+Answering a private number out loud can be overheard, so the voice-only mode (see [docs/alexa-fit.md](docs/alexa-fit.md)) is built around that: the assistant first asks whether anyone is nearby and offers a private phone link or the screen; it **never says your answer aloud unless you ask** ("read it back", flagged); the draft stays on the server and is saved through the MCP tool; consent is spoken. The Alexa+ side is simulated.
+
 ## Quickstart (mock mode, no AWS credentials)
 
 ```
@@ -96,8 +100,8 @@ Optional extras: `pip install '.[voice]'` (speaker ID and Whisper), `pip install
 
 | Area | State |
 |---|---|
-| MCP server, privacy engine, three decision types in one household, check-in, revision, next round and fair-share record, care-load hints, plan history, plan card, audit trail | Built; 73 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
-| Simulator and private link flow | Built; 12 browser tests (demo flows, failure path, each feature, phone width, accessibility in light and dark, microphone path) |
+| MCP server, privacy engine, three decision types in one household, check-in, revision, next round and fair-share record, care-load hints, plan history, plan card, audit trail | Built; 90 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
+| Simulator and private link flow | Built; 14 browser tests (demo flows, failure path, each feature, voice-only privacy, phone width, accessibility in light and dark, microphone path) |
 | Voice ID and Whisper | Built; measured on synthetic voices only |
 | Strands agent on Bedrock, AgentCore hosting | Code and notes written, **never run against AWS** |
 | Real-group user test | **Not run** |

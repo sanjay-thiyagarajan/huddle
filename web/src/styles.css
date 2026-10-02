@@ -94,3 +94,6 @@ a:not(.ghost) { color: var(--lagoon); text-underline-offset: 3px; }
   .shell { display: block; } .stage { padding: 0; max-width: none; }
 }
 .hint { border-left: 5px solid var(--dusk); background: var(--paper); padding: .6rem 1rem; border-radius: 4px 8px 8px 4px; margin-bottom: 1rem; }
+.voice-only .captions { background: var(--paper); border-radius: 10px; padding: .75rem 1rem; margin: .5rem 0 1rem; min-height: 5rem; }
+.caption { margin: 0 0 .5rem; max-width: 62ch; } .caption.warn { color: var(--warn); font-weight: 600; }
+.say-row { margin-bottom: .5rem; }

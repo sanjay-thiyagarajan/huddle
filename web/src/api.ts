@@ -24,6 +24,10 @@ export interface Draft {
   engine: string; latency_ms: number; engine_error?: string;
 }
 export interface PlanCard { title: string; text: string; markdown: string }
+export interface VoiceTurn {
+  session_id: string; say: string; stage: string; done: boolean; handoff: "link" | "screen" | null;
+  spoke_values: boolean; saved: boolean;
+}
 export interface Explanation { text: string; engine: string; latency_ms: number }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Result = Record<string, any>;
@@ -51,6 +55,8 @@ export const api = {
   result: (token: string) =>
     fetch(`/api/result?token=${encodeURIComponent(token)}`)
       .then((r) => parse<{ ready: boolean; result?: Result; checkin?: CheckinSummary }>(r)),
+  turn: (token: string, sessionId: string | null, utterance: string) =>
+    post("/api/agent/turn", { token, session_id: sessionId, utterance }).then((r) => parse<VoiceTurn>(r)),
   myAnswers: (token: string) =>
     fetch(`/me/answers?token=${encodeURIComponent(token)}`).then((r) => parse<{ answered: boolean; answer: Record<string, unknown> | null }>(r)),
   household: (token: string) => fetch(`/api/household?token=${encodeURIComponent(token)}`).then((r) => parse<{ plans: HouseholdPlan[] }>(r)),

@@ -6,6 +6,7 @@ import type { TaskDraft } from "../NeedEditor";
 import { api, listen, speechSupported, tool } from "../api";
 import type { Channel, CheckinSummary, Hint, Holds, HouseholdPlan, Mode, Person, Result, Status } from "../api";
 import Reveal from "../reveal/Reveal";
+import VoiceSession from "../VoiceSession";
 import { ENROL_PHRASES, enrolVoice, identifyVoice, recordWav } from "../voice";
 
 const PRESETS: Record<Mode, { name: string; channel: Channel }[]> = {
@@ -54,6 +55,10 @@ export default function Simulator() {
   const [revisitBusy, setRevisitBusy] = useState(false);
   const [hints, setHints] = useState<Hint[]>([]);
   const [plans, setPlans] = useState<HouseholdPlan[]>([]);
+  const [voiceOnly, setVoiceOnly] = useState(false);
+  const [onScreen, setOnScreen] = useState<string[]>([]); // people who chose the screen instead of voice
+  const [onPhone, setOnPhone] = useState<string[]>([]); // people who chose their phone link
+  const [revoice, setRevoice] = useState<string | null>(null);
 
   const host = round?.find((p) => p.is_host);
 
@@ -71,7 +76,7 @@ export default function Simulator() {
       const out = await tool<{ participants: Person[] }>("start_huddle", {
         mode, participants: people.filter((p) => p.name.trim()), deadline_seconds: demoClock ? 45 : 3600, need,
       });
-      setRound(out.participants); setActive(out.participants[0].name); setResult(null); setCheckin(null); setNote(null); setPlans([]);
+      setRound(out.participants); setActive(out.participants[0].name); setResult(null); setCheckin(null); setNote(null); setPlans([]); setOnScreen([]); setOnPhone([]); setRevoice(null);
     } catch (e) { setError((e as Error).message); }
   }
 
@@ -150,6 +155,7 @@ export default function Simulator() {
       setMode(next); setUtterance(WAKE[next]);
       setRound(out.participants); setActive(out.participants[0].name);
       setStatus(null); setResult(null); setCheckin(null); setHolds(null); setEditing(null);
+      setOnScreen([]); setOnPhone([]); setRevoice(null);
       setNote(next === mode ? "A new round is open for the same people. Everyone answers again from scratch."
         : "The next decision is open for the same family. Everyone answers from scratch.");
     } catch (e) { setError((e as Error).message); } finally { setRevisitBusy(false); }
@@ -158,7 +164,7 @@ export default function Simulator() {
     const mine = await api.myAnswers(p.token);
     setEditing(mine.answer);
   }
-  function reset() { setPlans([]); setRound(null); setStatus(null); setResult(null); setCheckin(null); setHolds(null); setNote(null); }
+  function reset() { setPlans([]); setOnScreen([]); setOnPhone([]); setRevoice(null); setRound(null); setStatus(null); setResult(null); setCheckin(null); setHolds(null); setNote(null); }
 
   const person = round?.find((p) => p.name === active);
   const answered = (n: string) => status?.participants.find((p) => p.name === n)?.answered ?? false;
@@ -239,6 +245,10 @@ export default function Simulator() {
                 {holds.stored.map((h) => <li key={h.name}>{h.name}: {h.has_answer ? "answer stored" : "nothing yet"}<span>{h.value}</span></li>)}
               </ul>
             )}
+            <label className="consent">
+              <input type="checkbox" checked={voiceOnly} onChange={(e) => setVoiceOnly(e.target.checked)} />
+              <span>Voice-only mode (like a speaker with no screen)</span>
+            </label>
             <details className="voicebox">
               <summary>What happened so far</summary>
               <p className="fine">Who did what and when. Never what anyone answered.</p>
@@ -337,20 +347,29 @@ export default function Simulator() {
                   await tool("submit_private_answer", { token: person.token, answer });
                   setEditing(null); void refresh();
                 }} />
-            ) : answered(person.name) ? (
+            ) : answered(person.name) && revoice !== person.name ? (
               <>
                 <p className="banner note" role="status">{person.name}'s answer is saved. It stays on the server and is not shown here. It can be changed until everyone has answered.</p>
-                {person.channel === "voice" && <button className="ghost" onClick={() => void change(person)}>Change my answer</button>}
+                {person.channel === "voice" && (voiceOnly && !onScreen.includes(person.name)
+                  ? <button className="ghost" onClick={() => setRevoice(person.name)}>Change my answer by voice</button>
+                  : <button className="ghost" onClick={() => void change(person)}>Change my answer</button>)}
               </>
-            ) : person.channel === "link" ? (
+            ) : person.channel === "link" || onPhone.includes(person.name) ? (
               <div className="linkbox">
-                <p>{person.name} answers on their own phone. Send them this private link:</p>
+                <p>{person.name} answers on their own phone, so nobody hears it. Send them this private link:</p>
                 <code>{window.location.origin}{person.link}</code>
                 <div className="row">
                   <button className="ghost" onClick={() => void navigator.clipboard?.writeText(window.location.origin + person.link)}>Copy link</button>
                   <a className="ghost" href={person.link} target="_blank" rel="noreferrer">Open their page</a>
                 </div>
               </div>
+            ) : voiceOnly && !onScreen.includes(person.name) ? (
+              <VoiceSession key={person.token} token={person.token} name={person.name}
+                onSaved={() => { setRevoice(null); void refresh(); }}
+                onHandoff={(kind) => {
+                  if (kind === "link") setOnPhone((l) => [...l, person.name]);
+                  else setOnScreen((l) => [...l, person.name]);
+                }} />
             ) : (
               <AnswerForm key={person.token} mode={mode} token={person.token} name={person.name} hints={hints}
                 onSubmit={async (answer) => {

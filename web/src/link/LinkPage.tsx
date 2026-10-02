@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import AnswerForm from "../AnswerForm";
 import Checkin from "../Checkin";
+import MyShare from "../MyShare";
 import { api } from "../api";
-import type { CheckinSummary, Result, Status } from "../api";
+import type { CheckinSummary, Result, ShareLine, Status } from "../api";
 import Reveal from "../reveal/Reveal";
 
 /** /r/<token>: a private page for one person, usable from any phone. */
@@ -10,6 +11,7 @@ export default function LinkPage({ token }: { token: string }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [checkin, setCheckin] = useState<CheckinSummary | null>(null);
+  const [share, setShare] = useState<ShareLine[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
 
@@ -19,7 +21,7 @@ export default function LinkPage({ token }: { token: string }) {
       setStatus(s);
       if (s.state === "closed") {
         const r = await api.result(token);
-        if (r.ready && r.result) { setResult(r.result); setCheckin(r.checkin ?? null); }
+        if (r.ready && r.result) { setResult(r.result); setCheckin(r.checkin ?? null); setShare(r.my_share ?? []); }
       }
     } catch (e) { setError((e as Error).message); }
   }, [token]);
@@ -47,6 +49,7 @@ export default function LinkPage({ token }: { token: string }) {
       {result ? (
         <>
           <Reveal result={result} onExplain={() => api.explain(token)} onCard={() => api.planCard(token)} />
+          {result.mode === "care" && <MyShare name={status.me.name} share={share} shared={false} />}
           <Checkin name={status.me.name} summary={checkin} done={status.events.some((e) => e.kind === "checked_in" && e.actor === status.me.name)}
             onSubmit={async (score) => { await api.checkin(token, score); await refresh(); }} />
         </>

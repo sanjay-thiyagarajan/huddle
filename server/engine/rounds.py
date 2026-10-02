@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from sqlmodel import Session, select
 
 from .. import config
-from ..db import Answer, Checkin, Event, HouseholdLoad, Participant, Round, RoundHousehold
+from ..db import Answer, Checkin, Event, HouseholdLoad, Participant, PersonalShare, Round, RoundHousehold
 from . import card, care, everyday, privacy, trip
 
 MODES = {"everyday": everyday, "care": care, "trip": trip}
@@ -155,9 +155,11 @@ def _close(s: Session, rnd: Round, now: datetime | None = None) -> Round:
             defaulted = True
     ordered = [(p.name, answers[p.id].data) for p in parts]
     kwargs = {"history": _history(s, rnd)} if rnd.mode == "care" else {}
-    rnd.result = m.compute(ordered, rnd.need, defaults_applied=defaulted, **kwargs)
-    if rnd.mode == "care":
-        _record_loads(s, rnd)
+    result = m.compute(ordered, rnd.need, defaults_applied=defaulted, **kwargs)
+    private = result.pop("_private", None)  # per-person hours never go into the group result
+    rnd.result = result
+    if private:
+        _record_private(s, rnd, private)
     rnd.defaults_applied = defaulted
     rnd.state = "closed"
     s.add(rnd)
@@ -173,23 +175,28 @@ def _household(s: Session, round_id: str) -> str:
 
 
 def _history(s: Session, rnd: Round) -> dict:
-    """Heavy-task hours from EARLIER rounds in this household chain (public assignments only)."""
+    """What EARLIER rounds in this household chain say about heavy tasks (internal; drives rotation)."""
     hh = _household(s, rnd.id)
     rows = [r for r in s.exec(select(HouseholdLoad).where(HouseholdLoad.household_id == hh))
             if r.round_id != rnd.id]
     heavy: dict[str, int] = {}
+    held: dict[str, int] = {}
     for r in rows:
-        heavy[r.person_name.lower()] = heavy.get(r.person_name.lower(), 0) + r.heavy_hours
-    return {"rounds": len({r.round_id for r in rows}), "heavy": heavy}
+        key = r.person_name.lower()
+        heavy[key] = heavy.get(key, 0) + r.heavy_hours
+        held[key] = held.get(key, 0) + (1 if r.heavy_hours > 0 else 0)
+    return {"rounds": len({r.round_id for r in rows}), "heavy": heavy, "held": held}
 
 
-def _record_loads(s: Session, rnd: Round) -> None:
+def _record_private(s: Session, rnd: Round, private: dict) -> None:
     hh = _household(s, rnd.id)
-    heavy = rnd.result.get("heavy_hours_this_plan", {})
-    totals = {a["name"]: sum(t["hours"] for t in a["tasks"]) for a in rnd.result["assignments"]}
-    for name in heavy:
+    for name, load in private["loads"].items():
         s.add(HouseholdLoad(household_id=hh, round_id=rnd.id, person_name=name,
-                            heavy_hours=heavy[name], total_hours=totals.get(name, 0)))
+                            heavy_hours=load["heavy"], total_hours=load["total"]))
+    for name, tasks in private["shares"].items():
+        for t in tasks:
+            s.add(PersonalShare(round_id=rnd.id, person_name=name, task_id=t["task_id"],
+                                label=t["label"], hours=t["hours"]))
 
 
 def submit_answer(s: Session, token: str, payload: dict, now: datetime | None = None) -> dict:
@@ -283,7 +290,11 @@ def get_result(s: Session, token: str, now: datetime | None = None) -> dict:
     rnd = advance(s, rnd, now)
     if rnd.state != "closed":
         return {"ready": False, "state": rnd.state}
+    shares = [{"task_id": x.task_id, "label": x.label, "hours": x.hours}
+              for x in s.exec(select(PersonalShare).where(PersonalShare.round_id == rnd.id,
+                                                          PersonalShare.person_name == p.name))]
     return {"ready": True, "state": "closed", "result": rnd.result,
+            "my_share": shares,  # this caller's own hours only
             "checkin": _checkin_summary(s, rnd)}
 
 
@@ -328,7 +339,7 @@ def _hints(s: Session, rnd: Round, p: Participant) -> list[dict]:
     """Optional private hint for ONE person, from their own public care assignment in this household.
 
     Shown only to them and never applied automatically. Built from the published split
-    (`heavy_hours_this_plan`), so it adds nothing that everyone in the group doesn't already see.
+    (their own private hours), is shown only to them, and reveals nothing about anyone else.
     """
     options = _HINT_BY_MODE.get(rnd.mode)
     if not options:
@@ -344,7 +355,9 @@ def _hints(s: Session, rnd: Round, p: Participant) -> list[dict]:
                 best = (when, other)
     if best is None:
         return []
-    heavy = best[1].result.get("heavy_hours_this_plan", {}).get(p.name, 0)
+    row = s.exec(select(HouseholdLoad).where(HouseholdLoad.round_id == best[1].id,
+                                             HouseholdLoad.person_name == p.name)).first()
+    heavy = row.heavy_hours if row else 0
     if heavy <= 0:
         return []
     labels = ", ".join(label for _, label in options)

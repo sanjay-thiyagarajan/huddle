@@ -97,3 +97,5 @@ a:not(.ghost) { color: var(--lagoon); text-underline-offset: 3px; }
 .voice-only .captions { background: var(--paper); border-radius: 10px; padding: .75rem 1rem; margin: .5rem 0 1rem; min-height: 5rem; }
 .caption { margin: 0 0 .5rem; max-width: 62ch; } .caption.warn { color: var(--warn); font-weight: 600; }
 .say-row { margin-bottom: .5rem; }
+.myshare { background: var(--dusk-tint); border-left: 6px solid var(--dusk); border-radius: 4px 12px 12px 4px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+.myshare ul { margin: .25rem 0 .5rem; padding-left: 1.1rem; }

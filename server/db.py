@@ -72,6 +72,16 @@ class HouseholdLoad(SQLModel, table=True):
     total_hours: int
 
 
+class PersonalShare(SQLModel, table=True):
+    """One person's own hours per task. Returned ONLY to that person (never in the group result)."""
+    id: int | None = Field(default=None, primary_key=True)
+    round_id: str = Field(index=True)
+    person_name: str
+    task_id: str
+    label: str
+    hours: int
+
+
 class VoiceProfile(SQLModel, table=True):
     """Biometric stand-in data: enrolment embeddings per household profile (never raw audio)."""
     name: str = Field(primary_key=True)

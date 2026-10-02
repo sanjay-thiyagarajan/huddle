@@ -81,7 +81,9 @@ def run_family(base_url: str) -> dict:
 
     stored = {n: c.get("/me/answers", params={"token": t}).json() for n, t in tokens.items()}
     result = tool("get_group_result", token=tokens["Maya"])
-    return {"steps": steps, "stored": stored, "result": result, "assistant_lines": assistant_lines}
+    own = {n: tool("get_group_result", token=t)["my_share"] for n, t in tokens.items()}  # private per person
+    return {"steps": steps, "stored": stored, "result": result, "assistant_lines": assistant_lines,
+            "own_share": own}
 
 
 def write_report(rep: dict, path: Path) -> None:
@@ -95,8 +97,11 @@ def write_report(rep: dict, path: Path) -> None:
     low = min(steps, key=lambda s: s["score"])
     short = [s["score"] for s in steps if s["step"] == len(FAMILY[s["speaker"]]["says"]) - 1]
     assignments = "".join(
-        f"- {a['name']}: " + "; ".join(f"{t['label']} {t['hours']} h" for t in a["tasks"]) + "\n"
+        f"- {a['name']}: " + "; ".join(t["label"] + (" (shared)" if t["shared"] else "") for t in a["tasks"]) + "\n"
         for a in res["assignments"])
+    own = "".join(
+        f"- {n}: " + ("; ".join(f"{s['label']} {s['hours']} h" for s in lines) or "no task") + "\n"
+        for n, lines in rep["own_share"].items())
     path.write_text(f"""# Fictional family simulation (synthetic voices)
 
 Run {date.today()} by `python tests/family_sim.py`.
@@ -122,7 +127,12 @@ The cast: Maya, Ben and Chen, three invented siblings sharing a parent's care.
 ## The result the family got
 {res["headline"]}
 
+Who owns what (what the whole group sees; no hours):
+
 {assignments}
+Each sibling's own hours (each returned only to that sibling's token; shown together here only because this family is fictional):
+
+{own}
 Gap in hours: {res["gap_hours_bucket"]}; gap in money: {res["gap_dollars_bucket"]}.
 
 ## Step by step

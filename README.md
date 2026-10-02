@@ -38,7 +38,7 @@ A family doesn't make one decision, it makes a stream of them, and they're conne
 
 | Decision | Each person privately gives | Output |
 |---|---|---|
-| **Share care for a parent** (flagship) | hours/week, dollars/month, task types they can't do | the care need vs. what's covered (gap in bands), a task split that respects every limit, ways to close the gap |
+| **Share care for a parent** (flagship) | hours/week, dollars/month, task types they can't do | the care need vs. what's covered (gap in bands), who owns which task (a split that respects every limit; each person sees only their own hours), ways to close the gap |
 | **Plan a weekend** | budget, vibe, dealbreakers | one activity and the trade-off |
 | **Plan a trip** | budget for the trip, vibe, dealbreakers | one trip and the trade-off |
 
@@ -91,7 +91,7 @@ Optional extras: `pip install '.[voice]'` (speaker ID and Whisper), `pip install
 ## Honest limits
 
 - **Privacy is no-attribution plus bucketing, not cryptographic secrecy.** With **two people**, the other person can infer your number from a band; the UI says so. With three or more, who set a limit is hidden. Research systems that give real cryptographic guarantees exist (see the novelty notes); Huddle doesn't claim that.
-- Care mode shows assignments, not capacities, but an assignment can hint at what someone can do.
+- **Care mode shows who owns each task, never anyone's hours.** Each person sees their own hours privately. It can still hint: someone who owns a task alone can cover at least that task's hours, because the task's hours are public. The fair-share record counts plans in which someone held a heavy task, not hours. On a shared screen, a selected profile's own hours are visible to anyone nearby (the app says so); the phone link is the private place.
 - **Voice identification is a stand-in for Alexa person recognition.** It separates profiles on a shared device and is not security. Accuracy has only been measured on synthetic text-to-speech voices ([docs/voice-accuracy.md](docs/voice-accuracy.md)): that shows the pipeline works, not how it behaves for real family voices.
 - **The Alexa+ experience is simulated.** The Alexa+ developer tools are preview and select-partner only; the simulator and the MCP server are both in this repo.
 - Reminders are simulated: the round's state changes when the reminder time passes, and nothing is actually sent.
@@ -100,8 +100,8 @@ Optional extras: `pip install '.[voice]'` (speaker ID and Whisper), `pip install
 
 | Area | State |
 |---|---|
-| MCP server, privacy engine, three decision types in one household, check-in, revision, next round and fair-share record, care-load hints, plan history, plan card, audit trail | Built; 91 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
-| Simulator and private link flow | Built; 14 browser tests (demo flows, failure path, each feature, voice-only privacy, phone width, accessibility in light and dark, microphone path) |
+| MCP server, privacy engine, three decision types in one household, check-in, revision, next round and fair-share record, care-load hints, plan history, plan card, audit trail | Built; 95 automated tests including the leak test (it covers every route and tool, and a two-round care chain) |
+| Simulator and private link flow | Built; 15 browser tests (demo flows, failure path, each feature, voice-only privacy, phone width, accessibility in light and dark, microphone path) |
 | Voice ID and Whisper | Built; measured on synthetic voices only |
 | Strands agent on Bedrock, AgentCore hosting | Code and notes written, **never run against AWS** |
 | Fictional-family simulation (synthetic voices: speaker ID, Whisper, voice-only dialogue, MCP, engine) | Passes end to end ([docs/family-simulation.md](docs/family-simulation.md)). **Tests the pipeline only; not evidence that Huddle helps real people** |

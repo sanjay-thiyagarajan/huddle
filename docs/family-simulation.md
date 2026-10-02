@@ -23,6 +23,14 @@ The cast: Maya, Ben and Chen, three invented siblings sharing a parent's care.
 ## The result the family got
 The plan needs 30 h/week and $1,800/month. After fitting everyone's private limits, the gap is 0-5 h per week and $250-500 per month.
 
+Who owns what (what the whole group sees; no hours):
+
+- Maya: Appointments and transport; Meals
+- Ben: Daily check-in; Finances and paperwork
+- Chen: Overnight cover
+
+Each sibling's own hours (each returned only to that sibling's token; shown together here only because this family is fictional):
+
 - Maya: Appointments and transport 6 h; Meals 6 h
 - Ben: Daily check-in 5 h; Finances and paperwork 3 h
 - Chen: Overnight cover 6 h

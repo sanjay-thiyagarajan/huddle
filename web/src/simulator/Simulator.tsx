@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import AnswerForm from "../AnswerForm";
 import Checkin from "../Checkin";
+import MyShare from "../MyShare";
 import NeedEditor, { DEFAULT_TASKS, needPayload } from "../NeedEditor";
 import type { TaskDraft } from "../NeedEditor";
 import { api, listen, speechSupported, tool } from "../api";
-import type { Channel, CheckinSummary, Hint, Holds, HouseholdPlan, Mode, Person, Result, Status } from "../api";
+import type { Channel, CheckinSummary, Hint, Holds, HouseholdPlan, Mode, Person, Result, ShareLine, Status } from "../api";
 import Reveal from "../reveal/Reveal";
 import VoiceSession from "../VoiceSession";
 import { ENROL_PHRASES, enrolVoice, identifyVoice, recordWav } from "../voice";
@@ -54,6 +55,7 @@ export default function Simulator() {
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [revisitBusy, setRevisitBusy] = useState(false);
   const [hints, setHints] = useState<Hint[]>([]);
+  const [share, setShare] = useState<ShareLine[]>([]);
   const [plans, setPlans] = useState<HouseholdPlan[]>([]);
   const [voiceOnly, setVoiceOnly] = useState(false);
   const [onScreen, setOnScreen] = useState<string[]>([]); // people who chose the screen instead of voice
@@ -106,6 +108,15 @@ export default function Simulator() {
     if (!person || result) { setHints([]); return; }
     let live = true;
     api.status(person.token).then((s) => { if (live) setHints(s.hints); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [round, active, result]);
+
+  // The selected profile's own hours, fetched with THEIR token (the group result carries none).
+  useEffect(() => {
+    const person = round?.find((p) => p.name === active);
+    if (!person || !result || result.mode !== "care") { setShare([]); return; }
+    let live = true;
+    api.result(person.token).then((r) => { if (live) setShare(r.my_share ?? []); }).catch(() => undefined);
     return () => { live = false; };
   }, [round, active, result]);
 
@@ -303,6 +314,9 @@ export default function Simulator() {
                 ))}
               </div>
             </div>
+            {person && result.mode === "care" && person.channel === "voice" && (
+              <MyShare name={person.name} share={share} shared />
+            )}
             {person && (person.channel === "link" && !checkedIn(person.name) ? (
               <p className="fine">{person.name} checks in on their own page: <a href={person.link} target="_blank" rel="noreferrer">open it</a>.</p>
             ) : (

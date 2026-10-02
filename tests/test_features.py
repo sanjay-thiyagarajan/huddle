@@ -135,6 +135,12 @@ HEAVY_NEED = {"tasks": [{"id": "night", "label": "Overnight cover", "type": "ove
               "dollars_per_month": 0}
 
 
+def share_hours(session, token, task_id):
+    """The caller's OWN hours on a task (private to them)."""
+    shares = rounds.get_result(session, token, T0)["my_share"]
+    return sum(x["hours"] for x in shares if x["task_id"] == task_id)
+
+
 def run_care_round(session, first_tokens, answers):
     for name, tok in first_tokens.items():
         rounds.submit_answer(session, tok, answers[name], T0)
@@ -148,19 +154,21 @@ def test_fairness_rotates_heavy_tasks_between_equally_able_people(session):
     t1 = {p["name"]: p["token"] for p in r1["participants"]}
     res1 = run_care_round(session, t1, answers)
     assert res1["fairness"] is None  # no history yet
-    h1 = res1["heavy_hours_this_plan"]
+    h1 = {n: share_hours(session, t1[n], "night") for n in ("Maya", "Ben")}  # each sees only their own
     assert h1["Maya"] + h1["Ben"] == 6 and h1["Maya"] != h1["Ben"]  # overnight is split unevenly
-    heavier = max(("Maya", "Ben"), key=h1.get)
+    heavier = max(h1, key=h1.get)
+    other = "Maya" if heavier == "Ben" else "Ben"
 
     r2 = rounds.revisit_round(session, t1["Maya"], now=T0)
     t2 = {p["name"]: p["token"] for p in r2["participants"]}
     res2 = run_care_round(session, t2, answers)
-    h2 = res2["heavy_hours_this_plan"]
-    assert h2[heavier] < h2["Maya" if heavier == "Ben" else "Ben"]  # the bigger share rotated
-    assert res2["fairness"]["plans"] == 2
-    assert res2["fairness"]["heavy_hours"]["Maya"] == res2["fairness"]["heavy_hours"]["Ben"] == 6
-    assert "never anyone's private limits" in res2["fairness"]["note"]
-    assert res2["fairness"]["heavy_hours"]["Chen"] == 0
+    h2 = {n: share_hours(session, t2[n], "night") for n in ("Maya", "Ben")}
+    assert h2[heavier] < h2[other]  # the bigger share rotated
+    f = res2["fairness"]
+    assert f["plans"] == 2
+    assert f["held_heavy"] == {"Maya": 2, "Ben": 2, "Chen": 0}  # ownership counts, not hours
+    assert "never anyone's hours or private limits" in f["note"]
+    assert "hours" not in {k for k in f}  # no hour totals anywhere in the public fairness record
 
 
 def test_fairness_never_costs_coverage_or_breaks_limits():
@@ -255,7 +263,7 @@ def test_back_to_care_after_a_weekend_keeps_the_household_and_default_need(sessi
 
 def test_care_load_hint_goes_only_to_the_person_who_carries_it_and_only_in_leisure(session):
     tok, res = closed_care_household(session)
-    heavy = res["heavy_hours_this_plan"]
+    heavy = {n: share_hours(session, tok[n], "night") for n in tok}  # each person's own private hours
     nxt = rounds.revisit_round(session, tok["Maya"], now=T0, mode="trip")
     t2 = {p["name"]: p["token"] for p in nxt["participants"]}
     for name in ("Maya", "Ben", "Chen"):
@@ -274,7 +282,7 @@ def test_care_load_hint_goes_only_to_the_person_who_carries_it_and_only_in_leisu
 
 def test_hint_vocabulary_matches_the_mode_so_suggestions_are_valid_answers(session):
     tok, res = closed_care_household(session)
-    carer = next(n for n, h in res["heavy_hours_this_plan"].items() if h > 0)
+    carer = next(n for n in tok if share_hours(session, tok[n], "night") > 0)
     for mode in ("everyday", "trip"):
         nxt = rounds.revisit_round(session, tok["Maya"], now=T0, mode=mode)
         t = {p["name"]: p["token"] for p in nxt["participants"]}

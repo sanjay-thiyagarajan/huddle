@@ -144,7 +144,7 @@ test("next round keeps the group, starts fresh, and shows the fair-share record"
   await round(["12", "600"], ["8", "500"], ["6", "400"]);
   await expect(page.getByText("Fair share over time")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(/across 2 plans/)).toBeVisible();
-  await expect(page.getByText(/never anyone's private limits/)).toBeVisible();
+  await expect(page.getByText(/never anyone's hours or private limits/)).toBeVisible();
 });
 
 test("plan card: copy, read aloud and print contain only the aggregate", async ({ page, context }) => {
@@ -232,4 +232,45 @@ test("one household: care plan, then a weekend for the same family with a privat
   await expect(plans).toContainText("Care plan");
   await expect(plans).toContainText("Weekend plan");
   expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
+});
+
+test("care plan: the group sees who owns what with no hours; each person sees only their own", async ({ page, context }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start the huddle" }).click(); // Maya, Ben by voice; Chen by link
+  await careAnswer(page, "12", "600");
+  await page.getByRole("button", { name: /^Ben/ }).click();
+  await careAnswer(page, "8", "500");
+  await page.getByRole("button", { name: /^Chen/ }).click();
+  const link = (await page.locator(".linkbox code").innerText()).trim();
+  const phone = await context.newPage();
+  await phone.goto(link);
+  await phone.getByLabel("Hours per week you can give").fill("6");
+  await phone.getByLabel("Dollars per month you can put in").fill("400");
+  await consent(phone); await save(phone);
+
+  await expect(page.getByRole("heading", { name: /care plan that fits everyone/ })).toBeVisible({ timeout: 10_000 });
+  // The group view: ownership only, with no per-person hours anywhere in it
+  const split = page.locator(".split");
+  await expect(split.getByRole("heading", { name: "Who owns what" })).toBeVisible();
+  await expect(split).toContainText("Overnight cover");
+  expect(await split.innerText()).not.toMatch(/\d+\s*h\/week/);
+
+  // Each profile sees only their own hours
+  const who = page.getByRole("group", { name: "Who is checking in" });
+  await who.getByRole("button", { name: "Maya" }).click();
+  const mine = page.locator(".myshare");
+  await expect(mine.getByRole("heading", { name: "Your part, Maya" })).toBeVisible();
+  await expect(mine).toContainText(/\d+ h\/week/);
+  const mayaText = await mine.innerText();
+  await who.getByRole("button", { name: "Ben" }).click();
+  await expect(mine.getByRole("heading", { name: "Your part, Ben" })).toBeVisible();
+  expect(await mine.innerText()).not.toEqual(mayaText);
+  await expect(mine).toContainText("shown on a shared screen"); // honest about the shared screen
+
+  // Chen on his phone sees his own part, privately
+  const own = phone.locator(".myshare");
+  await expect(own.getByRole("heading", { name: "Your part, Chen" })).toBeVisible({ timeout: 10_000 });
+  await expect(own).toContainText("Overnight cover");
+  await expect(own).toContainText("Only you see this");
+  expect(await phone.locator(".split").innerText()).not.toMatch(/\d+\s*h\/week/);
 });

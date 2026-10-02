@@ -7,6 +7,7 @@ export interface CheckinSummary {
   checked_in: number; of: number; complete: boolean; revisit?: boolean; message?: string;
   comfortable_count?: number; warning?: string;
 }
+export interface ShareLine { task_id: string; label: string; hours: number }
 export interface Hint { message: string; suggested_dealbreakers: string[] }
 export interface HouseholdPlan { round_id: string; mode: Mode; title: string; summary: string; at: string; checkin: string | null }
 export interface Status {
@@ -54,7 +55,7 @@ export const api = {
     post("/api/answers", { token, answer }).then((r) => parse<{ stored: boolean; warnings: string[] }>(r)),
   result: (token: string) =>
     fetch(`/api/result?token=${encodeURIComponent(token)}`)
-      .then((r) => parse<{ ready: boolean; result?: Result; checkin?: CheckinSummary }>(r)),
+      .then((r) => parse<{ ready: boolean; result?: Result; checkin?: CheckinSummary; my_share?: ShareLine[] }>(r)),
   turn: (token: string, sessionId: string | null, utterance: string) =>
     post("/api/agent/turn", { token, session_id: sessionId, utterance }).then((r) => parse<VoiceTurn>(r)),
   myAnswers: (token: string) =>

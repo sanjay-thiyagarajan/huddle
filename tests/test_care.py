@@ -100,3 +100,81 @@ def test_create_care_round_validates_need_and_health_labels(session):
         assert e.code == "bad_need"
     else:
         raise AssertionError("health-detail label should be rejected")
+
+
+# ---- the group result never shows per-person hours; each person sees only their own ---------------
+
+def _closed_care(session, answers, need=None):
+    from datetime import datetime
+
+    t0 = datetime(2026, 10, 10, 9, 0, 0)
+    people = [{"name": n} for n in answers]
+    r = rounds.create_round(session, "care", people, 3600, need=need, now=t0)
+    tok = {p["name"]: p["token"] for p in r["participants"]}
+    for name, ans in answers.items():
+        rounds.submit_answer(session, tok[name], {**ans, "consent": True}, t0)
+    return tok, t0
+
+
+SCENARIO_ANSWERS = {"Maya": a(12, 600, "nights"), "Ben": a(8, 500, "far_away"),
+                    "Chen": a(6, 400, "transport")}
+
+
+def test_group_result_has_ownership_but_no_per_person_hours(session):
+    tok, t0 = _closed_care(session, SCENARIO_ANSWERS)
+    res = rounds.get_result(session, tok["Maya"], t0)["result"]
+    for a_ in res["assignments"]:
+        assert set(a_) == {"name", "tasks"}
+        for t in a_["tasks"]:
+            assert set(t) == {"task_id", "label", "shared"}  # no hours key
+    flat = str(res)
+    assert "heavy_hours" not in flat and "_private" not in flat and "my_share" not in flat
+    card = rounds.plan_card(session, tok["Maya"], t0)["text"]
+    lines = card.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("Who owns what"))
+    block = []
+    for ln in lines[start + 1:]:
+        if not ln.startswith("  ") or ln.startswith("  Still open"):
+            break
+        block.append(ln)
+    assert len(block) == 3 and not any(ch.isdigit() for ln in block for ch in ln)  # owners only, no hours
+
+
+def test_each_person_gets_only_their_own_hours(session):
+    tok, t0 = _closed_care(session, SCENARIO_ANSWERS)
+    shares = {n: rounds.get_result(session, tok[n], t0)["my_share"] for n in tok}
+    res = rounds.get_result(session, tok["Maya"], t0)["result"]
+    owners = {a_["name"]: {t["task_id"] for t in a_["tasks"]} for a_ in res["assignments"]}
+    for name, mine in shares.items():
+        # Your share lists exactly the tasks you own, nothing else
+        assert {x["task_id"] for x in mine} == owners.get(name, set())
+        assert all(set(x) == {"task_id", "label", "hours"} for x in mine)
+    # Together the shares cover the hours the plan fills (26 of 30 here), and Maya's token never
+    # returns Ben's or Chen's rows
+    assert sum(x["hours"] for mine in shares.values() for x in mine) == 26
+    assert shares["Chen"] == [{"task_id": "overnight", "label": "Overnight cover", "hours": 6}]
+    assert "Overnight cover" not in str(shares["Maya"]) and "Meals" not in str(shares["Chen"])
+
+
+def test_sole_owner_still_hints_at_capacity_and_the_caveat_says_so(session):
+    tok, t0 = _closed_care(session, SCENARIO_ANSWERS)
+    res = rounds.get_result(session, tok["Maya"], t0)["result"]
+    # Chen alone owns overnight cover (6 h): everyone can infer Chen can do at least 6 h. We say so.
+    chen = next(a_ for a_ in res["assignments"] if a_["name"] == "Chen")
+    assert [(t["label"], t["shared"]) for t in chen["tasks"]] == [("Overnight cover", False)]
+    assert "owns a task alone can cover at least that task's hours" in res["assignment_caveat"]
+    assert "never anyone's hours" in res["assignment_caveat"]
+
+
+def test_random_inputs_never_put_hours_in_the_group_result(session):
+    import random
+
+    rng = random.Random(3)
+    kinds = list(care.BLOCKS)
+    for _ in range(12):
+        answers = {f"P{i}": a(rng.randint(0, 25), rng.randint(0, 900), *rng.sample(kinds, rng.randint(0, 2)))
+                   for i in range(rng.randint(3, 5))}
+        tok, t0 = _closed_care(session, answers)
+        res = rounds.get_result(session, next(iter(tok.values())), t0)["result"]
+        assert all("hours" not in t for a_ in res["assignments"] for t in a_["tasks"])
+        assert "heavy_hours" not in str(res)

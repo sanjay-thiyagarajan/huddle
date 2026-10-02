@@ -34,7 +34,11 @@ print(c.post("/api/answers", json={"token": tok["Chen"], "answer": {
 res = tool("get_group_result", token=tok["Maya"])["result"]
 keys = ("headline", "gap_hours_bucket", "gap_dollars_bucket", "warnings")
 print(json.dumps({k: res[k] for k in keys}, indent=1))
-for a in res["assignments"]:
-    print(" ", a["name"], [(t["label"], t["hours"]) for t in a["tasks"]])
+for a in res["assignments"]:  # the group sees ownership only
+    print(" ", a["name"], [t["label"] + (" (shared)" if t["shared"] else "") for t in a["tasks"]])
+print("each person's own hours (private to them):")
+for name, token in tok.items():
+    own = tool("get_group_result", token=token)["my_share"]
+    print(" ", name, [(s["label"], s["hours"]) for s in own])
 assert res["gap_hours_bucket"] == "0-5 h" and res["gap_dollars_bucket"] == "$250-500"
 print("OK")

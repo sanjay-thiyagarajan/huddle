@@ -16,9 +16,9 @@ def build_card(result: dict, checkin: dict | None = None) -> dict:
                      "At least one person did not answer, so a middle-of-the-road default was used for them.")
     if care:
         lines.append(result["headline"])
-        lines.append("Proposed split:")
+        lines.append("Who owns what (each person sees their own hours privately):")
         for a in result["assignments"]:
-            tasks = "; ".join(f"{t['label']}, {t['hours']} h/week" for t in a["tasks"])
+            tasks = "; ".join(t["label"] + (" (shared)" if t["shared"] else "") for t in a["tasks"])
             lines.append(f"  {a['name']}: {tasks}")
         if not result["assignments"]:
             lines.append("  Nobody could take on any task with the limits given.")
@@ -27,8 +27,9 @@ def build_card(result: dict, checkin: dict | None = None) -> dict:
         lines.append("Ways to close the gap:")
         lines += [f"  - {o}" for o in result["options"]]
         if result.get("fairness"):
-            heavy = ", ".join(f"{n} {h} h" for n, h in result["fairness"]["heavy_hours"].items())
-            lines.append(f"Heavy-task hours across {result['fairness']['plans']} plans: {heavy}.")
+            f = result["fairness"]
+            held = ", ".join(f"{n} {c} of {f['plans']}" for n, c in f["held_heavy"].items())
+            lines.append(f"Plans in which each person held a heavy task: {held}.")
         lines.append(result["assignment_caveat"])
         lines.append(result["disclaimer"])
     else:

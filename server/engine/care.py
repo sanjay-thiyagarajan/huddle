@@ -48,8 +48,9 @@ WEEKS_PER_MONTH = 4.33
 
 DISCLAIMER = "Decision aid, not medical, legal or financial advice."
 ASSIGNMENT_CAVEAT = (
-    "The split shows assignments, not anyone's limits. Still, an assignment can hint at what a "
-    "person is able to do, so treat it as a proposal to discuss."
+    "The group sees who owns each task, never anyone's hours or limits (each person sees only their own "
+    "hours). An assignment can still hint at what a person is able to do: someone who owns a task alone "
+    "can cover at least that task's hours. Treat the split as a proposal to discuss."
 )
 
 
@@ -182,7 +183,7 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
     tasks = need["tasks"]
     by_id = {t["id"]: t for t in tasks}
 
-    prior = history or {"rounds": 0, "heavy": {}}
+    prior = history or {"rounds": 0, "heavy": {}, "held": {}}
     prior_heavy = [prior["heavy"].get(nm.lower(), 0) for nm in names]
     split = solve(tasks, answers, prior_heavy)
     assigned_by_task = {t["id"]: sum(s.get(t["id"], 0) for s in split) for t in tasks}
@@ -192,11 +193,16 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
     money_have = sum(a["dollars_per_month"] for a in answers)
     gap_money = max(0.0, need["dollars_per_month"] - money_have)
 
+    # Public: who owns which task (and whether it is shared). No per-person hours.
+    owners = {tid: sum(1 for p in range(n) if split[p].get(tid, 0) > 0) for tid in by_id}
     assignments = [
-        {"name": names[p], "tasks": [{"task_id": tid, "label": by_id[tid]["label"], "hours": h}
-                                     for tid, h in split[p].items()]}
+        {"name": names[p], "tasks": [{"task_id": tid, "label": by_id[tid]["label"], "shared": owners[tid] > 1}
+                                     for tid in split[p]]}
         for p in range(n) if split[p]
     ]
+    # Private: each person's own hours, stored separately and returned only to that person.
+    shares = {names[p]: [{"task_id": tid, "label": by_id[tid]["label"], "hours": h}
+                         for tid, h in split[p].items()] for p in range(n)}
     unfilled = [{"task_id": t["id"], "label": t["label"],
                  "unfilled_hours_bucket": privacy.hours_bucket(t["hours"] - assigned_by_task[t["id"]])}
                 for t in tasks if assigned_by_task[t["id"]] < t["hours"]]
@@ -222,10 +228,12 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
     if prior["rounds"] > 0:
         fairness = {
             "plans": prior["rounds"] + 1,
-            "heavy_hours": {nm: prior_heavy[i] + heavy_now[nm] for i, nm in enumerate(names)},
-            "note": ("Heavy tasks (overnight cover, appointments and transport) are counted across plans for "
+            # Counts of plans in which each person held a heavy task: derived from public ownership only.
+            "held_heavy": {nm: prior["held"].get(nm.lower(), 0) + (1 if heavy_now[nm] > 0 else 0)
+                           for nm in names},
+            "note": ("Heavy tasks (overnight cover, appointments and transport) are tracked across plans for "
                      "this group. This split gave them to whoever had taken fewer, where limits allowed. "
-                     "Based on past assignments only, never anyone's private limits."),
+                     "Based on past task ownership only, never anyone's hours or private limits."),
         }
 
     headline = (
@@ -243,7 +251,6 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
         "unfilled_tasks": unfilled,
         "options": options,
         "fairness": fairness,
-        "heavy_hours_this_plan": heavy_now,
         "assignment_caveat": ASSIGNMENT_CAVEAT,
         "disclaimer": DISCLAIMER,
         "group_size": n,
@@ -252,4 +259,8 @@ def compute(named_answers: list[tuple[str, dict]], need: dict, defaults_applied:
                           if defaults_applied else None),
         "warnings": [policy.warning] if policy.warning else [],
         "honest_limits": privacy.HONEST_LIMITS,
+        # Internal only: rounds.py removes this before the result is stored or shown to anyone.
+        "_private": {"shares": shares,
+                     "loads": {nm: {"heavy": heavy_now[nm], "total": sum(s["hours"] for s in shares[nm])}
+                               for nm in names}},
     }

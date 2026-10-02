@@ -89,12 +89,13 @@ function Care({ r }: { r: Result }) {
     <>
       <p className="lead">{r.headline}</p>
       <div className="split">
-        <h3>Proposed split</h3>
+        <h3>Who owns what</h3>
+        <p className="fine">Each person sees their own hours privately. The group sees ownership, not hours.</p>
         {r.assignments.length === 0 && <p>Nobody could take on any task with the limits given.</p>}
         {r.assignments.map((a: Result) => (
           <div key={a.name} className="who">
             <strong>{a.name}</strong>
-            <ul>{a.tasks.map((t: Result) => <li key={t.task_id}>{t.label}, {t.hours} h/week</li>)}</ul>
+            <ul>{a.tasks.map((t: Result) => <li key={t.task_id}>{t.label}{t.shared ? " (shared)" : ""}</li>)}</ul>
           </div>
         ))}
         {r.unfilled_tasks.length > 0 && (
@@ -109,8 +110,8 @@ function Care({ r }: { r: Result }) {
       {r.fairness && (
         <div className="fairness">
           <h3>Fair share over time</h3>
-          <p>Heavy tasks (overnight cover, appointments and transport) so far, across {r.fairness.plans} plans:{" "}
-            {Object.entries(r.fairness.heavy_hours as Record<string, number>).map(([n, h]) => `${n} ${h} h`).join(", ")}.</p>
+          <p>Plans in which each person held a heavy task (overnight cover, appointments and transport), across {r.fairness.plans} plans:{" "}
+            {Object.entries(r.fairness.held_heavy as Record<string, number>).map(([n, c]) => `${n} ${c}`).join(", ")}.</p>
           <p className="fine">{r.fairness.note}</p>
         </div>
       )}

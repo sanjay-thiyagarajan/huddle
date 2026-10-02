@@ -1,7 +1,15 @@
-.PHONY: dev test lint
+.PHONY: install dev test lint
+PY := .venv/bin
+
+install:
+	uv venv -q --python 3.12 .venv
+	uv pip install -q -e ".[dev]"
+
 dev:
-	@echo "TODO: start server (uvicorn server.api:app) and web (vite) in HUDDLE_MODE=mock"
+	HUDDLE_MODE=mock $(PY)/uvicorn server.api:app --reload --port 8000
+
 test:
-	pytest -q
+	HUDDLE_MODE=mock $(PY)/pytest -q
+
 lint:
-	ruff check server tests
+	$(PY)/ruff check server tests

@@ -6,6 +6,7 @@ Channels:
 There is no SMS, web push or Alexa notification. Reminder text carries no private values and does not
 say who else has or hasn't answered. Email addresses are never logged or returned by any API.
 """
+
 import os
 import re
 import smtplib
@@ -26,7 +27,7 @@ _KIND_LINE = {
 @dataclass
 class Delivery:
     channel: str  # in_app | email
-    status: str   # queued | sent | skipped | failed
+    status: str  # queued | sent | skipped | failed
     detail: str
 
 
@@ -75,6 +76,31 @@ def deliver(*, name: str, email: str | None, mode: str, link: str, kind: str) ->
     out = [Delivery("in_app", "queued", "shown on their page")]
     if email:
         subject, body = reminder_message(name, mode, link, kind)
+        out.append(send_email(email, subject, body))
+    else:
+        out.append(Delivery("email", "skipped", "no email address given"))
+    return out
+
+
+_HOME_LINES = {
+    "proposal": "Someone is asking if you can take '{title}'. You can accept or decline it on your page.",
+    "plan": "This week's chore plan is ready. Have a look at your part.",
+    "due": "'{title}' is due soon.",
+    "nudge": "A request for '{title}' has been waiting. If you don't answer it will go to someone else.",
+}
+
+
+def home_message(kind: str, name: str, title: str, link: str) -> tuple[str, str]:
+    """Reminder text for the household. Names only the recipient; never says who else was asked."""
+    subject = "Huddle: your household chores"
+    body = f"Hi {name},\n\n" + _HOME_LINES[kind].format(title=title) + f"\n\nOpen your page: {link}\n"
+    return subject, body
+
+
+def deliver_home(*, name: str, email: str | None, kind: str, title: str, link: str) -> list[Delivery]:
+    out = [Delivery("in_app", "queued", "shown on their page")]
+    if email:
+        subject, body = home_message(kind, name, title, link)
         out.append(send_email(email, subject, body))
     else:
         out.append(Delivery("email", "skipped", "no email address given"))

@@ -3,13 +3,14 @@
 The household voice agent (Alexa+ stand-in) calls these tools. Every tool takes a signed
 participant token; none returns another participant's raw answer.
 """
+
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from .db import get_session
-from .engine import rounds
+from .engine import home, rounds
 
 mcp = FastMCP(
     "huddle",
@@ -34,8 +35,9 @@ def _run(fn, *args, **kwargs) -> dict[str, Any]:
 
 
 @mcp.tool()
-def start_huddle(mode: str, participants: list[dict], deadline_seconds: int = 3600,
-                 need: dict | None = None) -> dict[str, Any]:
+def start_huddle(
+    mode: str, participants: list[dict], deadline_seconds: int = 3600, need: dict | None = None
+) -> dict[str, Any]:
     """Open a round. mode: 'care', 'everyday' or 'trip'. participants: [{name, channel: voice|link,
     email (optional, for reminders; only add it if they agreed)}]; the first is the host. Returns a
     private token (and link) per participant. Emails are never returned."""
@@ -76,9 +78,85 @@ def submit_checkin(token: str, score: int) -> dict[str, Any]:
 
 
 @mcp.tool()
-def revisit_round(token: str, need: dict | None = None, deadline_seconds: int = 3600,
-                  mode: str | None = None) -> dict[str, Any]:
+def revisit_round(
+    token: str, need: dict | None = None, deadline_seconds: int = 3600, mode: str | None = None
+) -> dict[str, Any]:
     """Host only, after a round closes: open the household's next round for the same people.
     mode defaults to the same decision (a follow-up); pass another mode (care, everyday, trip) to
     start a different decision for the same family. Nothing private carries over. Returns fresh tokens."""
     return _run(rounds.revisit_round, token, need, deadline_seconds, None, mode)
+
+
+# ---- the household: chores planned fairly, week after week ----------------------------------------------------
+
+
+@mcp.tool()
+def create_household(name: str, members: list[dict]) -> dict[str, Any]:
+    """Create a household of 2 to 6 people: [{name, email (optional, for reminders; only if they agreed)}].
+    The first member is the admin. Returns a private token per member. Availability, preferences and skills
+    are each member's own and stay private."""
+    return _run(home.create_household, name, members)
+
+
+@mcp.tool()
+def get_household(token: str) -> dict[str, Any]:
+    """This week's picture for the caller: the shared chores and plan (who owns what, an aggregate fairness
+    report) plus only the caller's own private profile, offers and load."""
+    return _run(home.get_state, token)
+
+
+@mcp.tool()
+def set_my_profile(token: str, changes: dict) -> dict[str, Any]:
+    """Private to the caller: availability (minutes of chores a week), prefs ({category: love|ok|avoid|cannot}),
+    skills ({category: 0|1|2}), learn (categories), keywords (things they know, like 'plumbing'),
+    exempt_this_week (limited to 2 weeks in any 8, so the load stays fair)."""
+    return _run(home.set_profile, token, changes)
+
+
+@mcp.tool()
+def add_chore(token: str, fields: dict | None = None, text: str | None = None) -> dict[str, Any]:
+    """Add a chore any time. Give fields {title, category, minutes, cadence once|daily|weekly|biweekly|monthly,
+    due, heaviness, people_needed} or plain text ('clean the gutters by Saturday, about an hour') for the agent
+    to understand. If this week is planned the agent asks the best-fit person; otherwise it is held for the plan."""
+    return _run(home.add_chore_any, token, fields, text)
+
+
+@mcp.tool()
+def plan_week(token: str, week: str | None = None, replan: bool = False) -> dict[str, Any]:
+    """Plan a week (Monday date; default this week) fairly from everyone's private limits. replan=true redoes
+    everything not yet done and is admin-only."""
+    return _run(home.plan_week, token, week, replan)
+
+
+@mcp.tool()
+def respond_to_assignment(
+    token: str, assignment_id: int, accept: bool, reason: str | None = None
+) -> dict[str, Any]:
+    """Answer an offer made to the caller. Declining (reason: cannot|busy|prefer_not|other, private) makes the
+    agent ask someone else."""
+    return _run(home.respond, token, assignment_id, accept, reason)
+
+
+@mcp.tool()
+def hand_back_chore(token: str, assignment_id: int, reason: str | None = None) -> dict[str, Any]:
+    """The owner can't do a planned chore after all: the agent asks the next best person."""
+    return _run(home.hand_back, token, assignment_id, reason)
+
+
+@mcp.tool()
+def complete_chore(token: str, assignment_id: int) -> dict[str, Any]:
+    """The owner marks a planned chore done."""
+    return _run(home.complete, token, assignment_id)
+
+
+@mcp.tool()
+def week_checkin(token: str, score: int) -> dict[str, Any]:
+    """Private: how did this week feel, 1 (far too heavy) to 5 (comfortable)? A heavy week lightens the next."""
+    return _run(home.checkin_week, token, score)
+
+
+@mcp.tool()
+def ask_household_agent(token: str, utterance: str) -> dict[str, Any]:
+    """Talk to the household agent in plain words: add a chore, 'what's on my plate', 'I did the bins', 'who has
+    the laundry', 'hand back the laundry'. Replies never speak anyone's private preferences."""
+    return _run(home.say, token, utterance)

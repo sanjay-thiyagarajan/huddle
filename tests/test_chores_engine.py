@@ -204,3 +204,21 @@ def test_random_households_never_break_hard_limits_and_stay_reasonably_fair():
         for c in chs:
             assert len(out.assign[c.id]) <= c.people_needed
             assert len(set(out.assign[c.id])) == len(out.assign[c.id])
+
+
+# ---- work already assigned this week counts toward a fair share -----------------------------------------
+
+def test_mid_week_additions_are_fair_relative_to_what_people_already_have():
+    new = [chore(f"n{i}", 10) for i in range(6)]  # 60 minutes of new work
+    out = ch.plan(new, [member("a"), member("b")], base_load={"a": 120.0, "b": 0.0},
+                  base_minutes={"a": 120, "b": 0})
+    # a already holds 120 of the 180 total, so b takes ALL the new work. That leaves a 30-minute gap either
+    # side of a fair 90 each (33% of an average share): the best any split can do from here.
+    assert out.loads == {"a": 0.0, "b": 60.0}
+    assert out.report["deviation_pct"] == pytest.approx(33.3, abs=0.1)
+
+
+def test_assigned_minutes_use_up_availability():
+    out = ch.plan([chore("x", 50)], [member("a", 100), member("b", 100)],
+                  base_load={"a": 80.0}, base_minutes={"a": 80, "b": 0})
+    assert out.assign["x"] == ["b"]  # a has only 20 minutes left

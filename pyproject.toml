@@ -40,3 +40,7 @@ include = ["server*"]
 "tests/voice_eval.py" = ["E501"]  # long lines are report prose
 "server/agent/dialogue.py" = ["E501"]  # long lines are spoken prose
 "tests/family_sim.py" = ["E501"]  # long lines are report prose
+"server/engine/home.py" = ["E501"]  # long lines are user-facing prose
+"server/agent/chore_agent.py" = ["E501"]  # long lines are regexes and spoken prose
+"server/agent/prompts.py" = ["E501"]  # prompts are prose
+"server/mcp_server.py" = ["E501"]  # tool descriptions are prose

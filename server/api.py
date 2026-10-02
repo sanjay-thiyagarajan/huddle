@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from . import config
 from .agent import dialogue, huddle_agent
 from .db import VoiceProfile, get_session, init_db
-from .engine import rounds
+from .engine import home, rounds
 from .mcp_server import mcp
 from .voice import speaker_id, stt
 
@@ -29,7 +29,7 @@ log = logging.getLogger("huddle.scheduler")
 
 def _run_tick() -> int:
     with get_session() as s:
-        return len(rounds.tick(s))
+        return len(rounds.tick(s)) + len(home.tick(s))
 
 
 async def _scheduler():
@@ -286,6 +286,104 @@ def voice_forget(name: str, s: Session = Depends(_session)):
     return {"forgotten": name}
 
 
+# ---- the household: chores planned fairly, week after week --------------------------------------------
+
+
+class HomeCreateIn(BaseModel):
+    name: str
+    members: list[dict]
+
+
+class HomeProfileIn(BaseModel):
+    token: str
+    changes: dict
+
+
+class HomeChoreIn(BaseModel):
+    token: str
+    fields: dict | None = None
+    text: str | None = Field(default=None, max_length=300)
+
+
+class HomePlanIn(BaseModel):
+    token: str
+    week: str | None = None
+    replan: bool = False
+
+
+class HomeRespondIn(BaseModel):
+    token: str
+    assignment_id: int
+    accept: bool
+    reason: str | None = None
+
+
+class HomeActionIn(BaseModel):
+    token: str
+    assignment_id: int
+    reason: str | None = None
+
+
+class HomeScoreIn(BaseModel):
+    token: str
+    score: int
+
+
+class HomeSayIn(BaseModel):
+    token: str
+    utterance: str = Field(max_length=300)
+
+
+@app.post("/api/home")
+def home_create(body: HomeCreateIn, s: Session = Depends(_session)):
+    return home.create_household(s, body.name, body.members)
+
+
+@app.get("/api/home/state")
+def home_state(token: str, s: Session = Depends(_session)):
+    return home.get_state(s, token)
+
+
+@app.post("/api/home/profile")
+def home_profile(body: HomeProfileIn, s: Session = Depends(_session)):
+    return home.set_profile(s, body.token, body.changes)
+
+
+@app.post("/api/home/chores")
+def home_add_chore(body: HomeChoreIn, s: Session = Depends(_session)):
+    return home.add_chore_any(s, body.token, body.fields, body.text)
+
+
+@app.post("/api/home/plan")
+def home_plan(body: HomePlanIn, s: Session = Depends(_session)):
+    return home.plan_week(s, body.token, body.week, body.replan)
+
+
+@app.post("/api/home/respond")
+def home_respond(body: HomeRespondIn, s: Session = Depends(_session)):
+    return home.respond(s, body.token, body.assignment_id, body.accept, body.reason)
+
+
+@app.post("/api/home/handback")
+def home_handback(body: HomeActionIn, s: Session = Depends(_session)):
+    return home.hand_back(s, body.token, body.assignment_id, body.reason)
+
+
+@app.post("/api/home/complete")
+def home_complete(body: HomeActionIn, s: Session = Depends(_session)):
+    return home.complete(s, body.token, body.assignment_id)
+
+
+@app.post("/api/home/checkin")
+def home_checkin(body: HomeScoreIn, s: Session = Depends(_session)):
+    return home.checkin_week(s, body.token, body.score)
+
+
+@app.post("/api/home/say")
+def home_say(body: HomeSayIn, s: Session = Depends(_session)):
+    return home.say(s, body.token, body.utterance)
+
+
 # Built simulator (web/dist), when present. In dev, Vite serves it and proxies /api and /mcp here.
 _DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 if (_DIST / "index.html").exists():
@@ -293,6 +391,7 @@ if (_DIST / "index.html").exists():
 
     @app.get("/", include_in_schema=False)
     @app.get("/r/{token}", include_in_schema=False)
+    @app.get("/h/{token}", include_in_schema=False)
     def spa(token: str | None = None):
         return FileResponse(_DIST / "index.html")
 

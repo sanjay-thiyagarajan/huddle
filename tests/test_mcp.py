@@ -43,6 +43,12 @@ async def test_protocol_version_tools_and_full_round(live_server):
                 "week_checkin",
                 "ask_household_agent",
                 "start_household_decision",
+                "get_my_time",
+                "add_commitment",
+                "update_commitment",
+                "set_schedule_rules",
+                "start_gathering",
+                "answer_gathering",
             }
 
             r = (

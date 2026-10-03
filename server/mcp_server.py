@@ -10,7 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from .db import get_session
-from .engine import home, rounds
+from .engine import home, rounds, schedule_service
 
 mcp = FastMCP(
     "huddle",
@@ -163,9 +163,64 @@ def ask_household_agent(token: str, utterance: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def start_household_decision(token: str, mode: str, deadline_seconds: int = 3600, need: dict | None = None,
-                             remote: list[str] | None = None) -> dict[str, Any]:
+def start_household_decision(
+    token: str,
+    mode: str,
+    deadline_seconds: int = 3600,
+    need: dict | None = None,
+    remote: list[str] | None = None,
+) -> dict[str, Any]:
     """Start a family decision (mode: care, everyday or trip) for the whole household: the same people, each
     answering privately with their own link. The caller's own round token is returned; everyone else finds
     theirs in their own get_household. For care, `need` is the task list and monthly money needed."""
     return _run(home.start_decision, token, mode, deadline_seconds, need, remote)
+
+
+# ---- my time: personal and family commitments in one private schedule ------------------------------------------
+
+
+@mcp.tool()
+def get_my_time(token: str, week: str | None = None) -> dict[str, Any]:
+    """The caller's own week across family, friends, work and personal (private to them), with clashes and
+    smart options for each, tentative items, their rules and any find-a-time they are invited to."""
+    return _run(schedule_service.get_my_time, token, week)
+
+
+@mcp.tool()
+def add_commitment(token: str, fields: dict, resolution: dict | None = None) -> dict[str, Any]:
+    """Add a private commitment {title, circle family|friends|work|personal, start, minutes, flexibility
+    fixed|movable|optional, importance 1-3, repeat none|daily|weekly}. If it clashes, the reply lists options with
+    a recommendation; call again with resolution {choice: keep_both|decide_later|drop_new|move_new|move_existing|
+    drop_existing|ask_others, new_start / existing_new_start}."""
+    return _run(schedule_service.add_commitment, token, fields, resolution)
+
+
+@mcp.tool()
+def update_commitment(
+    token: str, commitment_id: str, changes: dict, occurrence: str | None = None
+) -> dict[str, Any]:
+    """Change or cancel one of the caller's own commitments (for a repeating one, `occurrence` is a date)."""
+    return _run(schedule_service.update_commitment, token, commitment_id, changes, occurrence)
+
+
+@mcp.tool()
+def set_schedule_rules(token: str, changes: dict) -> dict[str, Any]:
+    """Private: how the agent weighs and protects the caller's time (circle_rank, protected windows, work hours,
+    max_evenings, buffer_minutes)."""
+    return _run(schedule_service.set_rules, token, changes)
+
+
+@mcp.tool()
+def start_gathering(token: str, fields: dict) -> dict[str, Any]:
+    """Find a time with household members and outside guests: {title, circle, duration_minutes, windows
+    [{date_from, date_to, from, to}], members [names], guests [{name}]}. Members answer from their own schedule;
+    guests get a link. The result shows the best time, never who could not make which."""
+    return _run(schedule_service.start_gathering, token, fields)
+
+
+@mcp.tool()
+def answer_gathering(
+    token: str, round_id: str, answers: dict | None = None, accept_suggestions: bool = False
+) -> dict[str, Any]:
+    """Answer a find-a-time privately from the caller's own schedule (accept_suggestions) or by hand."""
+    return _run(schedule_service.answer_gathering, token, round_id, answers, accept_suggestions)

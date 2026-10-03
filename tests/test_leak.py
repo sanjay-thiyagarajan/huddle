@@ -48,6 +48,14 @@ COVERED_ROUTES = {
     "/api/home/checkin",
     "/api/home/say",
     "/api/home/decision",
+    "/api/time",
+    "/api/time/propose",
+    "/api/time/commitments",
+    "/api/time/update",
+    "/api/time/confirm",
+    "/api/time/rules",
+    "/api/time/gathering",
+    "/api/time/answer",
 }
 # Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
 VOICE_ROUTES = {
@@ -76,6 +84,12 @@ COVERED_TOOLS = {
     "week_checkin",
     "ask_household_agent",
     "start_household_decision",
+    "get_my_time",
+    "add_commitment",
+    "update_commitment",
+    "set_schedule_rules",
+    "start_gathering",
+    "answer_gathering",
 }
 
 
@@ -594,3 +608,55 @@ async def test_leak_household_decisions_tokens_and_care_hours(live_server):
         await sweep("planned")
         for n, s in (await states()).items():
             assert s["mine"]["load"]["care_minutes"] >= 0
+
+
+async def test_leak_time_routes_never_show_one_person_another_persons_schedule(fresh_db):
+    """Private commitment titles, times and rules planted for one member never reach anyone else."""
+    secret = "Zq7SentinelTherapy"
+    transport = httpx.ASGITransport(app=api.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+        out = (
+            await c.post("/api/home", json={"name": "H", "members": [{"name": n} for n in EVERYDAY]})
+        ).json()
+        tok = {m["name"]: m["token"] for m in out["members"]}
+        week = {"circle": "personal", "start": "2026-10-08T17:00", "minutes": 60}
+        added = await c.post(
+            "/api/time/commitments",
+            json={"token": tok["Maya"], "fields": {"title": secret, **week}},
+        )
+        assert added.status_code == 200 and secret in added.text
+        await c.post(
+            "/api/time/rules",
+            json={
+                "token": tok["Maya"],
+                "changes": {"protected": [{"days": [1], "start": "08:00", "end": "09:00", "label": secret}]},
+            },
+        )
+        gather = {
+            "title": "Drinks",
+            "circle": "friends",
+            "duration_minutes": 60,
+            "windows": [{"date_from": "2026-10-08", "date_to": "2026-10-08", "from": "16:00", "to": "20:00"}],
+            "members": ["Ben", "Chen"],
+        }
+        g = (await c.post("/api/time/gathering", json={"token": tok["Maya"], "fields": gather})).json()
+        for who in ("Ben", "Chen"):
+            bodies = [
+                (await c.get("/api/time", params={"token": tok[who], "week": "2026-10-05"})).text,
+                (await c.get("/api/home/state", params={"token": tok[who]})).text,
+                (
+                    await c.post(
+                        "/api/time/propose", json={"token": tok[who], "fields": {"title": "x", **week}}
+                    )
+                ).text,
+                (
+                    await c.post(
+                        "/api/time/answer",
+                        json={"token": tok[who], "round_id": g["round_id"], "accept_suggestions": True},
+                    )
+                ).text,
+            ]
+            for body in bodies:
+                assert secret not in body, f"{who} saw Maya's private commitment"
+        res = await c.get("/api/result", params={"token": g["my_token"]})
+        assert secret not in res.text and "Ben" not in json.dumps(res.json().get("result", {}))

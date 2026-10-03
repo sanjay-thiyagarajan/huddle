@@ -1,4 +1,5 @@
 """REST API for the simulator and the private link flow, plus the MCP mount at /mcp."""
+
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -14,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from . import config
 from .agent import dialogue, huddle_agent
 from .db import VoiceProfile, get_session, init_db
-from .engine import home, rounds
+from .engine import home, rounds, schedule_service
 from .mcp_server import mcp
 from .voice import speaker_id, stt
 
@@ -86,8 +87,9 @@ def health():
 
 @app.post("/api/rounds")
 def create_round(body: RoundIn, s: Session = Depends(_session)):
-    return rounds.create_round(s, body.mode, [p.model_dump() for p in body.participants],
-                               body.deadline_seconds, body.need)
+    return rounds.create_round(
+        s, body.mode, [p.model_dump() for p in body.participants], body.deadline_seconds, body.need
+    )
 
 
 @app.get("/api/status")
@@ -187,8 +189,9 @@ async def agent_turn(body: VoiceTurnIn, s: Session = Depends(_session)):
         raise rounds.HuddleError("round_closed", "This round is closed.", 409)
     try:
         if body.session_id is None:
-            sid, turn = dialogue.open_session(body.token, info["mode"], info["me"]["name"],
-                                              huddle_agent.parse_with_engine)
+            sid, turn = dialogue.open_session(
+                body.token, info["mode"], info["me"]["name"], huddle_agent.parse_with_engine
+            )
         else:
             sid = body.session_id
             turn = await run_in_threadpool(dialogue.take_turn, sid, body.token, body.utterance)
@@ -196,14 +199,26 @@ async def agent_turn(body: VoiceTurnIn, s: Session = Depends(_session)):
         raise rounds.HuddleError("voice_session", str(e), 410) from None
     saved = False
     if turn.submit is not None:
-        out = await huddle_agent.call_tool("submit_private_answer",
-                                           {"token": body.token, "answer": turn.submit})
+        out = await huddle_agent.call_tool(
+            "submit_private_answer", {"token": body.token, "answer": turn.submit}
+        )
         saved = "error" not in out
         if not saved:
-            turn = dialogue.Turn("Sorry, I couldn't save that. Let's use the screen instead.", "handoff",
-                                 done=True, handoff="screen")
-    return {"session_id": sid, "say": turn.say, "stage": turn.stage, "done": turn.done,
-            "handoff": turn.handoff, "spoke_values": turn.spoke_values, "saved": saved}
+            turn = dialogue.Turn(
+                "Sorry, I couldn't save that. Let's use the screen instead.",
+                "handoff",
+                done=True,
+                handoff="screen",
+            )
+    return {
+        "session_id": sid,
+        "say": turn.say,
+        "stage": turn.stage,
+        "done": turn.done,
+        "handoff": turn.handoff,
+        "spoke_values": turn.spoke_values,
+        "saved": saved,
+    }
 
 
 @app.get("/api/agent/explain")
@@ -253,11 +268,18 @@ async def voice_identify(request: Request, s: Session = Depends(_session)):
     import numpy as np
 
     vec = _voice(speaker_id.embed, await _audio(request))
-    profiles = {p.name: speaker_id.enrol_profile([np.array(e) for e in p.embeddings])
-                for p in s.exec(select(VoiceProfile)) if p.embeddings}
+    profiles = {
+        p.name: speaker_id.enrol_profile([np.array(e) for e in p.embeddings])
+        for p in s.exec(select(VoiceProfile))
+        if p.embeddings
+    }
     name, score = speaker_id.identify(vec, profiles)
-    return {"recognized": name is not None, "name": name, "score": round(score, 2),
-            "note": "Voice ID separates profiles; it is not security."}
+    return {
+        "recognized": name is not None,
+        "name": name,
+        "score": round(score, 2),
+        "note": "Voice ID separates profiles; it is not security.",
+    }
 
 
 @app.post("/api/voice/transcribe")
@@ -337,6 +359,42 @@ class HomeDecisionIn(BaseModel):
     remote: list[str] | None = None
 
 
+class TimeCommitIn(BaseModel):
+    token: str
+    fields: dict
+    resolution: dict | None = None
+
+
+class TimeUpdateIn(BaseModel):
+    token: str
+    commitment_id: str
+    changes: dict
+    occurrence: str | None = None
+
+
+class TimeConfirmIn(BaseModel):
+    token: str
+    commitment_id: str
+    keep: bool
+
+
+class TimeRulesIn(BaseModel):
+    token: str
+    changes: dict
+
+
+class TimeGatherIn(BaseModel):
+    token: str
+    fields: dict
+
+
+class TimeAnswerIn(BaseModel):
+    token: str
+    round_id: str
+    answers: dict | None = None
+    accept_suggestions: bool = False
+
+
 class HomeSayIn(BaseModel):
     token: str
     utterance: str = Field(max_length=300)
@@ -395,6 +453,50 @@ def home_decision(body: HomeDecisionIn, s: Session = Depends(_session)):
 @app.post("/api/home/say")
 def home_say(body: HomeSayIn, s: Session = Depends(_session)):
     return home.say(s, body.token, body.utterance)
+
+
+@app.get("/api/time")
+def time_get(token: str, week: str | None = None, s: Session = Depends(_session)):
+    return schedule_service.get_my_time(s, token, week)
+
+
+@app.post("/api/time/propose")
+def time_propose(body: TimeCommitIn, s: Session = Depends(_session)):
+    return schedule_service.analyze(s, body.token, body.fields)
+
+
+@app.post("/api/time/commitments")
+def time_add(body: TimeCommitIn, s: Session = Depends(_session)):
+    return schedule_service.add_commitment(s, body.token, body.fields, body.resolution)
+
+
+@app.post("/api/time/update")
+def time_update(body: TimeUpdateIn, s: Session = Depends(_session)):
+    return schedule_service.update_commitment(
+        s, body.token, body.commitment_id, body.changes, body.occurrence
+    )
+
+
+@app.post("/api/time/confirm")
+def time_confirm(body: TimeConfirmIn, s: Session = Depends(_session)):
+    return schedule_service.confirm_tentative(s, body.token, body.commitment_id, body.keep)
+
+
+@app.post("/api/time/rules")
+def time_rules(body: TimeRulesIn, s: Session = Depends(_session)):
+    return schedule_service.set_rules(s, body.token, body.changes)
+
+
+@app.post("/api/time/gathering")
+def time_gathering(body: TimeGatherIn, s: Session = Depends(_session)):
+    return schedule_service.start_gathering(s, body.token, body.fields)
+
+
+@app.post("/api/time/answer")
+def time_answer(body: TimeAnswerIn, s: Session = Depends(_session)):
+    return schedule_service.answer_gathering(
+        s, body.token, body.round_id, body.answers, body.accept_suggestions
+    )
 
 
 # Built simulator (web/dist), when present. In dev, Vite serves it and proxies /api and /mcp here.

@@ -18,6 +18,8 @@
 4. **Consent is spoken** and required before anything is stored.
 5. **Fallbacks, not guessing:** after three misheard turns it hands off to the phone or screen instead of storing a guess.
 
+6. **The rules travel with the server.** A real assistant would only have what the MCP server sends. So the privacy gate, the no-read-back rule and consent are in the server's `instructions` (returned at initialize), and every tool carries a title and behaviour hints. The simulator follows the same rules, but they are not only in the simulator.
+
 ## What is simulated or unverified (do not overclaim)
 - **The Alexa+ experience is a web simulator.** Alexa+ developer tools are preview and select-partner only, so none of this has run on a real device.
 - In the simulator, "speaking" is typed text with an optional microphone (browser speech recognition) and browser text-to-speech.

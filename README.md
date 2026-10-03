@@ -282,6 +282,14 @@ Streamable HTTP at `/mcp`, protocol version 2025-11-25 (official `mcp` Python SD
 | `answer_gathering` | Answer a find-a-time from the caller's own schedule, or by hand |
 | `ask_schedule_agent` | Plain words: "dinner with Priya Thursday 7pm", "what's my week", "when am I free", "find a time for drinks with Ben" |
 
+**Written for a host that has never seen this repository.** An Alexa+ agent learns a server from what it sends, so the server says how to behave:
+
+- **Instructions in the initialize result**: a token belongs to one person; ask whether anyone can hear before taking a private answer by voice; never say an answer back unless asked; ask for consent; never guess who set a limit.
+- **A title and behaviour hints on every tool** (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, all set explicitly, because the protocol's defaults for a missing hint are destructive and open-world). Two tools are read-only, three can discard something (`close_round`, `plan_week`, `update_commitment`), and the nine that can notify a person are marked open-world, because a notification becomes an email when SMTP is configured and the person gave an address.
+- **Shapes a host can read**: people and members are typed in the input schema, the per-mode answer shape is in `submit_private_answer`'s description (generated from the engines' own types, so it cannot drift), and every tool returns structured content with an output schema.
+- **Visible in the simulator.** *MCP tool calls*, in the Try a decision tab and under the household agent box, lists each tool the assistant called and how long it took, never what was sent. The household agent box speaks through `ask_household_agent` over MCP, not a REST route.
+- **Checked from a second client.** `make mcp-inspect` lists the tools with the official MCP Inspector CLI (Node), and CI runs the same check against the built container. A protocol test fails if a tool is added without a title and hints.
+
 Try it from any MCP client:
 
 ```python
@@ -315,6 +323,7 @@ make test      # unit, protocol and leak tests
 make e2e       # Playwright browser tests (needs Google Chrome)
 make docker    # or: docker compose up --build  ->  http://localhost:8000
 make lint
+make mcp-inspect   # with `make dev` running: list the tools from a non-Python MCP client (needs Node)
 ```
 
 Optional extras: `pip install '.[voice]'` (speaker ID and Whisper), `pip install '.[aws]'` (Strands and Bedrock).
@@ -341,13 +350,13 @@ server/            FastAPI app, MCP server, engines, agent, voice, notifier
 web/               React + Vite simulator and private link pages; Playwright tests
 deploy/            Dockerfile, AgentCore hosting notes
 tests/             unit, protocol, leak and voice tests; synthetic audio fixtures
-scripts/           helpers (audio fixtures, scripted rounds)
+scripts/           helpers (audio fixtures, scripted rounds, a Strands agent as the MCP host)
 docs/              plan, architecture notes, accuracy reports, friction log, product feedback
 ```
 
 ## Verification
 
-- 287 automated tests, including the privacy leak test across every REST route and MCP tool (with a full household lifecycle of profiles, plans, offers, declines and check-ins), a protocol test asserting the negotiated MCP version, the fairness engine's hard-limit, fairness, preference, rotation and ledger properties, the chore agent's parsing and intents, the scheduler, real SMTP delivery against a local mail sink, and an end-to-end run of a fictional family through speaker ID, Whisper, the voice-only dialogue and the MCP tools ([docs/family-simulation.md](docs/family-simulation.md)).
+- 289 automated tests, including the privacy leak test across every REST route and MCP tool (with a full household lifecycle of profiles, plans, offers, declines and check-ins), protocol tests asserting the negotiated MCP version and that every tool carries a title, behaviour hints and an output schema, the fairness engine's hard-limit, fairness, preference, rotation and ledger properties, the chore agent's parsing and intents, the scheduler, real SMTP delivery against a local mail sink, and an end-to-end run of a fictional family through speaker ID, Whisper, the voice-only dialogue and the MCP tools ([docs/family-simulation.md](docs/family-simulation.md)).
 - 30 Playwright browser tests covering the flows, the household with decisions and chores together, reminders, voice-only privacy, phone width, and accessibility (axe, WCAG A and AA) in light and dark.
 - Voice accuracy report: [docs/voice-accuracy.md](docs/voice-accuracy.md).
 
@@ -365,7 +374,7 @@ docs/              plan, architecture notes, accuracy reports, friction log, pro
 ## Hackathon
 
 - **Track:** Alexa+. A self-hosted MCP server (Streamable HTTP, 2025-11-25) that an Alexa+ agent calls, with a web simulator as the Alexa+ experience; both are in this repository.
-- **AWS Builder:** Amazon Bedrock through the Strands Agents SDK, with hosting on Bedrock AgentCore Runtime (see [deploy/agentcore/README.md](deploy/agentcore/README.md)).
+- **AWS Builder:** Amazon Bedrock through the Strands Agents SDK, with hosting on Bedrock AgentCore Runtime (see [deploy/agentcore/README.md](deploy/agentcore/README.md)). `scripts/aws_mcp_host.py` makes a Strands agent the MCP host: it discovers Huddle's tools over Streamable HTTP and speaks for one member with that member's own token. **Status: wired and tested up to the model call; not yet run against AWS.** [docs/product-feedback.md](docs/product-feedback.md) says exactly what has and hasn't run.
 - **Open Source:** this repository, MIT licensed, created after Aug 31, 2026.
 
 ## Licence

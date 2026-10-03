@@ -23,6 +23,13 @@ test("care round: voice, remote link and reveal, with no value leaking into othe
   await expect(page.getByRole("list", { name: "What the server holds" })).toContainText("Maya: answer stored");
   expect(await page.locator("body").innerText()).not.toContain("613");
 
+  // The MCP trace names the tools the assistant called, and nothing that was sent
+  await page.getByText("MCP tool calls", { exact: true }).click();
+  const trace = page.getByRole("list", { name: "MCP tool calls" });
+  await expect(trace).toContainText("start_huddle ok");
+  await expect(trace).toContainText("submit_private_answer ok");
+  expect(await trace.innerText()).not.toMatch(/613|\$|token/);
+
   await page.getByLabel("Hours per week you can give").fill("8");
   await page.getByLabel("Dollars per month you can put in").fill("500");
   await page.getByRole("button", { name: "I live far away" }).click();

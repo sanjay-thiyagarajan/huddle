@@ -1,4 +1,4 @@
-import { post } from "../api";
+import { post, tool } from "../api";
 
 async function parse<T>(res: Response): Promise<T> {
   const body = await res.json().catch(() => ({}));
@@ -75,5 +75,6 @@ export const homeApi = {
   decision: (token: string, mode: string, need?: unknown) =>
     post("/api/home/decision", { token, mode, need }).then((r) => parse<{ round_id: string; my_link: string }>(r)),
   checkin: (token: string, score: number) => post("/api/home/checkin", { token, score }).then((r) => parse<{ stored: boolean }>(r)),
-  say: (token: string, utterance: string) => post("/api/home/say", { token, utterance }).then((r) => parse<SayResult>(r)),
+  // The agent box is the assistant speaking: it goes through the MCP tool, not a REST route.
+  say: (token: string, utterance: string) => tool<SayResult>("ask_household_agent", { token, utterance }),
 };

@@ -5,6 +5,7 @@ import MyShare from "../MyShare";
 import NeedEditor, { DEFAULT_TASKS, needPayload } from "../NeedEditor";
 import type { TaskDraft } from "../NeedEditor";
 import { api, listen, speechSupported, tool } from "../api";
+import McpTrace from "../McpTrace";
 import { inviteText, shareOrCopy } from "../share";
 import type { Channel, CheckinSummary, Delivery, Hint, Holds, HouseholdPlan, Mode, NudgeResult, Person, Result, ShareLine, Status } from "../api";
 import Reveal from "../reveal/Reveal";
@@ -285,6 +286,7 @@ export default function Simulator() {
                 ))}
               </ul>
             </details>
+            <McpTrace />
             {plans.length > 0 && (
               <details className="voicebox" open>
                 <summary>Family plans so far</summary>

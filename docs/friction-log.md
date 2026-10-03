@@ -86,3 +86,12 @@ Format per entry: task attempted, steps taken, expected vs actual, severity, wor
 ## F-010: ruff format over a whole directory rewrites unrelated files (2026-10-03)
 Running `ruff format server tests` reformatted ~25 files I had not touched, twice. The repo only formats some modules,
 so format only the files being changed. Reverted with `git checkout` on the untouched ones.
+
+## F-011: A tool with a `dict` parameter and no annotations tells the host almost nothing (2026-10-03)
+- **Task attempted:** Check what an MCP host that has never seen this repository learns from `tools/list` (the position an Alexa+ agent is in).
+- **Steps taken:** Listed the tools with the MCP Inspector CLI (`npx @modelcontextprotocol/inspector --cli http://localhost:8000/mcp --transport http --method tools/list`) and read the JSON.
+- **Expected:** Enough in the schema for a host to build a valid call and to know which tools are safe to call freely.
+- **Actual:** Every `dict` or `list[dict]` parameter came out as `{"type": "object", "additionalProperties": true}`, so `submit_private_answer` gave no hint of what an answer contains. No tool had annotations, and the protocol's defaults for missing hints are `destructiveHint: true` and `openWorldHint: true`, so a careful host would treat a read like `get_household` as destructive. Nothing warned about either at registration.
+- **Severity:** Medium. The server worked with our own client, which already knew the shapes, so the gap was invisible until a second client looked.
+- **Workaround:** `TypedDict` parameters for people and members (the tool still receives a plain dict), the per-mode answer shapes written into the tool description from the engines' own `Literal` types, a `title` and all four hints set on every tool, and a test that fails if a tool is added without them.
+- **Suggestion:** Have FastMCP warn when a parameter's schema is an open object and when a tool has no annotations, and show `ToolAnnotations` in the first server example in the quickstart.

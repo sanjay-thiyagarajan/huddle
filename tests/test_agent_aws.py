@@ -96,3 +96,25 @@ def test_model_id_is_required_and_real_strands_agent_builds(monkeypatch):
     monkeypatch.setenv("AWS_REGION", "us-west-2")
     agent = ha._make_agent("system")  # builds Agent + BedrockModel; makes no AWS call
     assert type(agent).__name__ == "Agent"
+
+
+def test_strands_mcp_client_discovers_and_calls_huddle_tools(live_server):
+    """The Strands side of the AWS path, without Bedrock: its MCP client reaches Huddle's server over
+    Streamable HTTP, sees every tool, and gets structured content back from a real call."""
+    pytest.importorskip("strands")  # the optional `aws` extra
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "aws_mcp_host", Path(__file__).parent.parent / "scripts" / "aws_mcp_host.py")
+    host = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(host)
+
+    url = f"{live_server}/mcp"
+    names = host.discover(url)
+    assert len(names) == 25 and {"ask_household_agent", "submit_private_answer"} <= set(names)
+    with host.connect(url) as client:
+        name, token = host._household(client)
+        state = client.call_tool_sync("t-1", "get_household", {"token": token})
+    assert name == "Maya" and state["status"] == "success"
+    assert state["structuredContent"]["me"]["name"] == "Maya"

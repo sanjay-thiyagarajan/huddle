@@ -6,6 +6,8 @@
 | FastAPI, Uvicorn, Pydantic, SQLModel | API, validation, storage | MIT / BSD-3 |
 | SciPy, NumPy | Care-mode task split (`milp`) | BSD-3 |
 | React, Vite, TypeScript | Simulator front end | MIT / Apache-2.0 |
+| Playwright, axe-core (`@axe-core/playwright`) | Browser and accessibility tests (development only) | Apache-2.0 / MPL-2.0 |
+| MCP Inspector (`@modelcontextprotocol/inspector`) | Interop check from a non-Python MCP client (development and CI only, run through `npx`) | Apache-2.0 / MIT (project in transition) |
 | Bricolage Grotesque, Figtree (Google Fonts) | Typefaces | SIL OFL 1.1 |
 | SpeechBrain, `speechbrain/spkrec-ecapa-voxceleb` | Speaker identification (optional `voice` extra) | Apache-2.0 |
 | PyTorch, torchaudio, soundfile | Audio and model runtime (optional) | BSD-3 / BSD-3 / BSD-3 |

@@ -51,9 +51,27 @@ async function parse<T>(res: Response): Promise<T> {
 export const post = (url: string, body: unknown) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
+/** One MCP tool call the simulator's agent made. Names and timing only, never arguments or results. */
+export interface ToolCall { name: string; ok: boolean; ms: number }
+let calls: ToolCall[] = [];
+const watchers = new Set<() => void>();
+export const toolCalls = {
+  get: () => calls,
+  subscribe: (fn: () => void) => { watchers.add(fn); return () => { watchers.delete(fn); }; },
+};
+const record = (name: string, ok: boolean, since: number) => {
+  calls = [...calls, { name, ok, ms: Math.round(performance.now() - since) }].slice(-30);
+  watchers.forEach((fn) => fn());
+};
+
 /** The simulator's agent talks to Huddle's MCP server (Streamable HTTP) through this proxy. */
-export const tool = <T,>(name: string, args: Record<string, unknown>) =>
-  post("/api/agent/tool", { name, arguments: args }).then((r) => parse<T>(r));
+export const tool = <T,>(name: string, args: Record<string, unknown>) => {
+  const since = performance.now();
+  return post("/api/agent/tool", { name, arguments: args }).then((r) => parse<T>(r)).then(
+    (out) => { record(name, true, since); return out; },
+    (e) => { record(name, false, since); throw e; },
+  );
+};
 
 export const api = {
   status: (token: string) => fetch(`/api/status?token=${encodeURIComponent(token)}`).then((r) => parse<Status>(r)),

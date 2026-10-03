@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen, speechSupported } from "../api";
+import McpTrace from "../McpTrace";
 import { CATEGORY_LABELS, homeApi, label } from "./homeApi";
 import type { Category, HomeAssignment, HomeProfile, HomeState } from "./homeApi";
 
@@ -329,6 +330,7 @@ export function AgentBox({ token, onChanged }: { token: string; onChanged: () =>
         {lines.length === 0 ? <p className="fine">Replies appear here.</p> : lines.map((l, i) => <p key={i} className="caption">{l}</p>)}
       </div>
       {error && <p className="error" role="alert">{error}</p>}
+      <McpTrace />
     </section>
   );
 }

@@ -10,7 +10,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev,aws]"  # aws: the Strands MCP client test runs here (no AWS calls)
       - run: ruff check server tests scripts
       - name: Tests (includes the privacy leak test)
         run: pytest -q
@@ -47,6 +47,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"  # the Inspector CLI needs Node 22.19 or later
       - run: docker build -f deploy/Dockerfile -t huddle .
       - name: Container serves the app
         run: |
@@ -54,3 +57,8 @@ jobs:
           for i in $(seq 1 30); do curl -sf localhost:8000/api/health && break; sleep 1; done
           curl -sf localhost:8000/api/health
           curl -sf -o /dev/null localhost:8000/
+      - name: A non-Python MCP client (Inspector CLI) lists the tools over Streamable HTTP
+        run: |
+          npx -y @modelcontextprotocol/inspector@2.9.0 --cli http://localhost:8000/mcp --transport http --method tools/list > tools.json
+          test "$(jq '.tools | length' tools.json)" = "25"
+          test "$(jq '[.tools[] | select(.annotations.readOnlyHint)] | length' tools.json)" = "2"

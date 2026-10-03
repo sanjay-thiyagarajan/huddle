@@ -1,4 +1,4 @@
-.PHONY: install dev test lint build e2e docker
+.PHONY: install dev test lint build e2e docker mcp-inspect
 PY := .venv/bin
 
 install:
@@ -24,6 +24,10 @@ test:
 # Browser tests (Playwright + installed Chrome): demo flows, failure path, axe accessibility audit
 e2e:
 	cd web && npx playwright test
+
+# Interop check from a non-Python MCP client (the official Inspector CLI, Node). Needs `make dev` running.
+mcp-inspect:
+	npx -y @modelcontextprotocol/inspector@2.9.0 --cli http://localhost:8000/mcp --transport http --method tools/list
 
 docker:
 	docker compose up --build   # http://localhost:8000, mock mode

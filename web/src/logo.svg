@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Huddle">
+  <style>.a{--c:#1e6b73}.b{--c:#463d78}.c{--c:#f0b13f}@media (prefers-color-scheme:dark){.a{--c:#5ec2cc}.b{--c:#bcb3f0}}path{stroke:var(--c);fill:none;stroke-width:8;stroke-linecap:round}circle{fill:var(--c)}</style>
+  <g class="a"><path d="M17.22 14.38A23 23 0 0 1 46.78 14.38"/><circle cx="32.0" cy="22.0" r="5.6"/></g>
+  <g class="b"><path d="M54.65 28.01A23 23 0 0 1 39.87 53.61"/><circle cx="40.66" cy="37.0" r="5.6"/></g>
+  <g class="c"><path d="M24.13 53.61A23 23 0 0 1 9.35 28.01"/><circle cx="23.34" cy="37.0" r="5.6"/></g>
+</svg>

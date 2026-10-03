@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import HomeApp from "./home/HomeApp";
 import HomePage from "./home/HomePage";
 import LinkPage from "./link/LinkPage";
+import { Brand } from "./Logo";
 import Simulator from "./simulator/Simulator";
 import "./styles.css";
 
@@ -13,7 +14,7 @@ function Shell() {
   return (
     <>
       <nav className="tabs" aria-label="Huddle">
-        <span className="brand">Huddle</span>
+        <Brand />
         <button className="tab" aria-pressed={tab === "home"} onClick={() => setTab("home")}>Home</button>
         <button className="tab" aria-pressed={tab === "decisions"} onClick={() => setTab("decisions")}>Try a decision</button>
       </nav>

@@ -1,3 +1,5 @@
+<p align="center"><img src="web/src/logo.svg" alt="Huddle logo: three people seen from above, leaning in" width="96" height="96"></p>
+
 # Huddle
 
 **A fair, private home.** Everyone in the household tells Huddle privately what they can take on. Huddle proposes a fair plan, with the trade-off explained, without saying who set which limit.

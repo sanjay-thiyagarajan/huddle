@@ -104,7 +104,10 @@ a:not(.ghost) { color: var(--lagoon); text-underline-offset: 3px; }
 /* ---- navigation and the household ---- */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .tabs { display: flex; gap: .5rem; align-items: center; padding: .6rem 1.25rem; background: var(--paper); border-bottom: 1px solid var(--line); }
-.tabs .brand { font-family: var(--display); font-weight: 700; font-size: 1.2rem; margin-right: 1rem; }
+.brand { display: inline-flex; align-items: center; gap: .45rem; font-family: var(--display); font-weight: 700; font-size: 1.2rem; }
+.brand .logo { flex: none; }
+.tabs .brand { margin-right: 1rem; }
+.solo > .brand, .home-head > .brand { display: flex; margin-bottom: 1rem; }
 .tab { background: transparent; color: var(--ink); border: 1.5px solid transparent; border-radius: 999px; padding: .35rem 1rem; }
 .tab[aria-pressed="true"] { border-color: var(--ink); font-weight: 600; }
 .home-app, .home-setup { padding: 1.5rem clamp(1rem, 4vw, 3rem) 3rem; max-width: 76rem; margin: 0 auto; }

@@ -6,6 +6,7 @@ import MyShare from "../MyShare";
 import { api } from "../api";
 import type { CheckinSummary, Mode, Result, ShareLine, Status } from "../api";
 import Reveal from "../reveal/Reveal";
+import { Brand } from "../Logo";
 
 /** /r/<token>: a private page for one person, usable from any phone. */
 export default function LinkPage({ token }: { token: string }) {
@@ -47,12 +48,13 @@ export default function LinkPage({ token }: { token: string }) {
     return () => clearInterval(id);
   }, [refresh]);
 
-  if (error) return <main className="solo"><h1>This link doesn't work</h1><p className="error">{error}</p><p>Ask the person who started the huddle for a new link.</p></main>;
+  if (error) return <main className="solo"><Brand /><h1>This link doesn't work</h1><p className="error">{error}</p><p>Ask the person who started the huddle for a new link.</p></main>;
   if (!status) return <main className="solo"><p>Loading</p></main>;
 
   const care = status.mode === "care";
   return (
     <main className="solo">
+      <Brand />
       <h1>Hi {status.me.name}, this page is just for you</h1>
       <p className="lede">
         {care ? "Your family is working out how to share care. " : "Your group is picking a plan. "}

@@ -74,6 +74,7 @@ Answering a private number out loud can be overheard, so the **voice-only mode**
 - In the household, each member's availability, preferences, skills, exemptions, decline reasons and how a week felt are returned only to them. The group sees chores, who owns them, and an aggregate fairness report; the audit trail never says who was asked or why.
 - Matching is private, not cryptographic: with three or more people, who set a limit stays hidden; with two people, the other person can work out your number, and the app says so.
 - Voice identification is a stand-in for Alexa person recognition. It separates profiles on a shared device; it does not authenticate anyone.
+- Commitments, schedule rules and the reasons behind a find-a-time answer are returned only to their owner. A find-a-time result is a time and a trade-off, with a count only when three or more answered.
 - An automated **leak test** seeds distinctive values and calls every route and MCP tool as every participant, failing if anyone else's value appears.
 
 ## How a family decision works
@@ -133,7 +134,7 @@ flowchart LR
   subgraph Edge["Interfaces and agent"]
     direction TB
     REST["REST API<br/>/api/*"]
-    AGENT["Household agent<br/>parsing, voice-only dialogue,<br/>chores in plain words"]
+    AGENT["Household agent<br/>parsing, voice-only dialogue,<br/>chores and commitments in plain words"]
     MCP["MCP server<br/>Streamable HTTP /mcp<br/>spec 2025-11-25"]
   end
 
@@ -141,6 +142,7 @@ flowchart LR
     direction TB
     ROUNDS["Round service<br/>lifecycle, check-in, household,<br/>audit trail, plan card"]
     HOME["Household service<br/>private profiles, weekly fair plans,<br/>offers, ledger"]
+    TIME["Scheduling service<br/>private commitments, rules,<br/>clash options, find a time"]
     SCHED["Scheduler<br/>reminders, deadlines"]
     VOICE["Voice<br/>ECAPA speaker ID, Whisper"]
     NOTIFY["Notifier<br/>in-app, email"]
@@ -148,13 +150,13 @@ flowchart LR
 
   subgraph Logic["Decision logic"]
     direction TB
-    ENGINE["Decision engines<br/>care (integer program), weekend, trip,<br/>chore planner (fair share)"]
+    ENGINE["Decision engines<br/>care (integer program), weekend, trip,<br/>chore planner (fair share),<br/>find-a-time, clash options"]
     PRIV["Privacy engine<br/>bands, k rule, leak guard"]
   end
 
   subgraph Data["Storage and external services"]
     direction TB
-    DB[("SQLite<br/>private answers, shares,<br/>contacts, events")]
+    DB[("SQLite<br/>private answers, shares,<br/>commitments, rules, contacts, events")]
     SMTP["SMTP provider<br/>(optional)"]
     BR["Amazon Bedrock<br/>Strands Agents SDK<br/>(aws mode)"]
   end
@@ -165,9 +167,14 @@ flowchart LR
   AGENT -->|"MCP tool calls"| MCP
   REST --> ROUNDS
   REST --> HOME
+  REST --> TIME
   REST --> VOICE
   MCP --> ROUNDS
   MCP --> HOME
+  MCP --> TIME
+  TIME --> ENGINE
+  TIME --> DB
+  TIME --> ROUNDS
   SCHED --> HOME
   HOME --> ENGINE
   HOME --> DB
@@ -183,11 +190,12 @@ flowchart LR
 
 | Layer | Where | What it does |
 |---|---|---|
-| MCP server | `server/mcp_server.py` | Eighteen tools over Streamable HTTP (seven for family decisions, eleven for the household), called at runtime by the household agent |
+| MCP server | `server/mcp_server.py` | Twenty-five tools over Streamable HTTP (seven for family decisions, eleven for the household, seven for personal and family scheduling), called at runtime by the household agent |
 | Privacy engine | `server/engine/privacy.py` | Bands, the k rule, the leak guard |
 | Round service | `server/engine/rounds.py` | Lifecycle, answers, revision, check-in, household chain, reminders, audit trail |
 | Decision engines | `server/engine/care.py`, `everyday.py`, `trip.py` | Care split via `scipy.optimize.milp`; weekend and trip matching |
 | Chore planner | `server/engine/chores.py` | Fair weekly split of household chores (integer program): hard limits, fair share by private availability, ledger, preferences, rotation |
+| Scheduling | `server/engine/schedule.py`, `schedule_service.py`, `schedule_chat.py`, `when.py`, `server/agent/schedule_agent.py` | One person's private commitments across family, friends, work and personal; clash options with a recommendation; rules; the plain-words clash conversation; find-a-time as a decision mode |
 | Household service | `server/engine/home.py` | Persistent households, private profiles, ad hoc and pre-planned chores, offers (ask, accept, decline, re-ask), ledger, reminders, weekly auto-plan |
 | Household agent | `server/agent/` | Mock parser by default; Strands agent on Bedrock in `aws` mode; the voice-only dialogue; chores understood from plain words |
 | Voice | `server/voice/` | SpeechBrain ECAPA speaker identification and local Whisper transcription |

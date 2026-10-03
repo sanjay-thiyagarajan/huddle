@@ -95,3 +95,21 @@ so format only the files being changed. Reverted with `git checkout` on the unto
 - **Severity:** Medium. The server worked with our own client, which already knew the shapes, so the gap was invisible until a second client looked.
 - **Workaround:** `TypedDict` parameters for people and members (the tool still receives a plain dict), the per-mode answer shapes written into the tool description from the engines' own `Literal` types, a `title` and all four hints set on every tool, and a test that fails if a tool is added without them.
 - **Suggestion:** Have FastMCP warn when a parameter's schema is an open object and when a tool has no annotations, and show `ToolAnnotations` in the first server example in the quickstart.
+
+## F-012: Devpost MCP `update_project` publishes a draft, and `get_project` has no version (2026-10-03)
+- **Task attempted:** Fill in the Devpost project page (description, built-with, repository link) for a project still in draft, without submitting it.
+- **Steps taken:** `get_project`, then `update_project` with `description`, `built_with`, `links` and a `version` for the conflict check; then `get_project` again.
+- **Expected:** The draft stays a draft with the new text, and the version to pass comes from the read.
+- **Actual:** `get_project` returns no version field, so the first update (guessing version 1) was rejected with "Project was modified since you last read it (current version 2)" although nothing had changed. The retry succeeded, and the project's `state` went from `submission_draft` to `published` with `published_at` set. The tool description says nothing about publishing. The hackathon entry itself stayed unsubmitted (`submitted_at: null`).
+- **Severity:** Medium. The page became public as a side effect of a save, and there is no MCP tool to return it to draft.
+- **Workaround:** Take the version from the conflict error. For publishing, none; checked that the text had no placeholders before saving.
+- **Suggestion:** Return `version` from `get_project`, say in `update_project`'s description that a complete save publishes the page, and offer a way to keep or restore draft state.
+
+## F-013: Devpost gallery upload returns a URL too small to read a diagram (2026-10-03)
+- **Task attempted:** Show the architecture diagrams inside the Devpost writeup (Devpost does not render mermaid).
+- **Steps taken:** Rendered each mermaid block to PNG, uploaded with `prepare_gallery_image_upload`, and embedded the returned `gallery_image_url` in the description.
+- **Expected:** An image large enough to read at page width.
+- **Actual:** `gallery_image_url` points at `gallery.jpg`, resized to about 806 px wide; the text in a dense diagram is unreadable. The full upload is served next to it as `original.png`, which the response does not mention.
+- **Severity:** Low.
+- **Workaround:** Swapped `gallery.jpg` for `original.png` in the image URLs.
+- **Suggestion:** Return the original's URL in the upload response as well, and say which sizes exist.

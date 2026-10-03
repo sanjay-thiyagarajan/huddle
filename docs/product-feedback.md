@@ -115,3 +115,10 @@ One section per tool/API/SDK used. Updated as each phase lands; finalized in P8.
 
 ### AWS services used, and how (for the AWS Builder mini-challenge)
 Planned: Amazon Bedrock (model inference through Strands) and Bedrock AgentCore Runtime (hosting the MCP server). **Neither has been run yet**; this section must be updated with real results, latencies from `scripts/aws_scripted_rounds.py` and the deployed runtime ARN before submission.
+
+## Devpost MCP server
+- **Purpose:** reading the hackathon's submission requirements and filling in the Devpost project page from Claude Code.
+- **What worked:** `get_submission_requirements` returns every custom question with its id, type and options, which made it clear what the form asks for. `update_project` took the full markdown description, the built-with tags and the repository link in one call.
+- **What to improve:** `get_project` returns no version although `update_project` accepts one for conflict checks, and a complete save moved the project from draft to published without saying so (friction log F-012). Custom answers go through `submit_project`, whose description does not say whether a call can save them as a draft without submitting (not tried).
+- **Zero to hello world:** a few minutes after authenticating.
+- **Would build again:** Yes, with the publishing behaviour known in advance.

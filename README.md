@@ -45,7 +45,9 @@ flowchart TB
 - **Care shapes the occasional.** Whoever carries heavy care tasks gets an optional private hint when a weekend or trip is planned. It's never applied for them.
 - **Fairness has memory.** A ledger of what people actually did, a heavy week reported privately, and rotation of heavy tasks mean the same person doesn't keep getting the hardest job.
 
-Huddle decides; it doesn't hire nurses, book providers, move money, split expenses, read calendars, or give medical, legal or financial advice. Care mode collects no health data. When the family can't cover a parent's care between them, the plan suggests paid help as one option at a placeholder rate.
+**And your own time sits across all of it.** *My time* keeps one person's family, friends, work and personal commitments in one private schedule. Tell the agent in plain words, and when two things clash it explains the clash, suggests a way out and waits for your choice. *Find a time* asks friends, colleagues or family from each person's own schedule and returns a time and a trade-off, never who couldn't make which. The week's free time suggests a realistic chore availability. See [docs/scheduling.md](docs/scheduling.md).
+
+Huddle decides; it doesn't hire nurses, book providers, move money, split expenses, sync with external calendars, or give medical, legal or financial advice. Care mode collects no health data. When the family can't cover a parent's care between them, the plan suggests paid help as one option at a placeholder rate.
 
 ## What Huddle does
 
@@ -57,7 +59,8 @@ Huddle decides; it doesn't hire nurses, book providers, move money, split expens
 6. **Talks plainly**: "what's on my plate", "I did the bins", "who has the laundry", by typing, speaking, or through the MCP tools.
 7. **Reminds people for real**: a scheduler sends reminders in-app and, if the host entered an address, by email, plus a stated default if someone never answers.
 8. **Checks in afterwards**: privately after a decision, and privately after each chore week.
-9. **Hands over a plan card** the assistant can read aloud, and a copyable weekly chore plan.
+9. **Looks after your own time.** Commitments across family, friends, work and personal life, clashes settled by conversation, rules it learns, and find-a-time with guests by link.
+10. **Hands over a plan card** the assistant can read aloud, and a copyable weekly chore plan.
 
 How the chore agent decides, what is private and what is visible, and where its limits are: [docs/fairness-agent.md](docs/fairness-agent.md).
 
@@ -259,6 +262,18 @@ Streamable HTTP at `/mcp`, protocol version 2025-11-25 (official `mcp` Python SD
 | `start_household_decision` | Start a care, weekend or trip decision for the whole household: the same people, each answering privately with their own link |
 | `ask_household_agent` | Plain words: add a chore, "what's on my plate", "I did the bins", "who has the laundry" |
 
+**My time**
+
+| Tool | Purpose |
+|---|---|
+| `get_my_time` | The caller's own week across family, friends, work and personal, with clashes, rules and any find-a-time they are in |
+| `add_commitment` | Add a private commitment; a clash returns options with a recommendation, and a second call carries the chosen resolution |
+| `update_commitment` | Change or cancel one of the caller's own commitments (one date of a repeating one) |
+| `set_schedule_rules` | Private: which circle wins a clash, protected times, work hours, most evenings out, buffer |
+| `start_gathering` | Find a time with household members and guests; guests get a private link |
+| `answer_gathering` | Answer a find-a-time from the caller's own schedule, or by hand |
+| `ask_schedule_agent` | Plain words: "dinner with Priya Thursday 7pm", "what's my week", "when am I free", "find a time for drinks with Ben" |
+
 Try it from any MCP client:
 
 ```python
@@ -324,13 +339,14 @@ docs/              plan, architecture notes, accuracy reports, friction log, pro
 
 ## Verification
 
-- 225 automated tests, including the privacy leak test across every REST route and MCP tool (with a full household lifecycle of profiles, plans, offers, declines and check-ins), a protocol test asserting the negotiated MCP version, the fairness engine's hard-limit, fairness, preference, rotation and ledger properties, the chore agent's parsing and intents, the scheduler, real SMTP delivery against a local mail sink, and an end-to-end run of a fictional family through speaker ID, Whisper, the voice-only dialogue and the MCP tools ([docs/family-simulation.md](docs/family-simulation.md)).
-- 29 Playwright browser tests covering the flows, the household with decisions and chores together, reminders, voice-only privacy, phone width, and accessibility (axe, WCAG A and AA) in light and dark.
+- 287 automated tests, including the privacy leak test across every REST route and MCP tool (with a full household lifecycle of profiles, plans, offers, declines and check-ins), a protocol test asserting the negotiated MCP version, the fairness engine's hard-limit, fairness, preference, rotation and ledger properties, the chore agent's parsing and intents, the scheduler, real SMTP delivery against a local mail sink, and an end-to-end run of a fictional family through speaker ID, Whisper, the voice-only dialogue and the MCP tools ([docs/family-simulation.md](docs/family-simulation.md)).
+- 30 Playwright browser tests covering the flows, the household with decisions and chores together, reminders, voice-only privacy, phone width, and accessibility (axe, WCAG A and AA) in light and dark.
 - Voice accuracy report: [docs/voice-accuracy.md](docs/voice-accuracy.md).
 
 ## Documentation
 
 - [docs/alexa-fit.md](docs/alexa-fit.md): why a shared voice assistant, and how the voice-only mode handles privacy
+- [docs/scheduling.md](docs/scheduling.md): personal and family scheduling, clash conversations, find-a-time, and what stays private
 - [docs/fairness-agent.md](docs/fairness-agent.md): how the household agent defines and keeps fairness, and what is private
 - [docs/evidence-household-load.md](docs/evidence-household-load.md): sourced evidence on unequal household load
 - [docs/novelty-search.md](docs/novelty-search.md): related work and how Huddle differs

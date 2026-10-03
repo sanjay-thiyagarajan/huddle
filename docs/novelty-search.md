@@ -51,3 +51,20 @@ family-decision features and the MCP/voice interface, is Huddle's differentiator
 Other differences worth stating plainly (and not overstating): the ask-accept-decline loop never reveals who was
 asked or who declined; exemptions are capped and availability has a floor so private self-reports can't be used to
 dodge a fair share; a heavy week lightens the next one; heavy and mental-load chores rotate.
+
+## Addendum: personal and family scheduling (searched 2026-10-03)
+**This space is crowded too; do not claim novelty for "a smart calendar" or "a group poll".** Search results and
+comparison pages (read, not tested by us) show:
+- **AI calendar assistants** (Reclaim, Motion and similar) that protect focus time, move tasks and propose alternative
+  times for conflicts, and that describe protecting family time such as dinner or bedtime routines.
+- **Family organisers** (Cozi, TimeTree, Google Calendar for families) built around a shared, colour-coded calendar
+  where everyone's events are visible.
+- **Group polls** (When2meet, Doodle, Calendly) for "when can we all meet?"; the comparisons describe a visible
+  availability grid or poll per participant.
+
+**What I did not find:** one person's family, friends and work commitments handled together by an agent that explains
+a clash and waits for their choice, where the household sees nothing of their schedule and a group find-a-time returns
+only a time and a trade-off, never who ruled out which slot, and where the week's free time feeds a fair chore and
+care split. That combination is the differentiator; each piece alone is not.
+Sources: reclaim.ai/compare/motion-alternative, cozi.com/calendar, koalendar.com/blog/when2meet-vs-doodle and the
+other comparison pages returned for those searches.

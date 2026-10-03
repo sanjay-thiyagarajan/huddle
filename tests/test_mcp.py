@@ -49,6 +49,7 @@ async def test_protocol_version_tools_and_full_round(live_server):
                 "set_schedule_rules",
                 "start_gathering",
                 "answer_gathering",
+                "ask_schedule_agent",
             }
 
             r = (

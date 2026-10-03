@@ -56,6 +56,7 @@ COVERED_ROUTES = {
     "/api/time/rules",
     "/api/time/gathering",
     "/api/time/answer",
+    "/api/time/say",
 }
 # Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
 VOICE_ROUTES = {
@@ -90,6 +91,7 @@ COVERED_TOOLS = {
     "set_schedule_rules",
     "start_gathering",
     "answer_gathering",
+    "ask_schedule_agent",
 }
 
 

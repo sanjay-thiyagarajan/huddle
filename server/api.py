@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from . import config
 from .agent import dialogue, huddle_agent
 from .db import VoiceProfile, get_session, init_db
-from .engine import home, rounds, schedule_service
+from .engine import home, rounds, schedule_chat, schedule_service
 from .mcp_server import mcp
 from .voice import speaker_id, stt
 
@@ -388,6 +388,12 @@ class TimeGatherIn(BaseModel):
     fields: dict
 
 
+class TimeSayIn(BaseModel):
+    token: str
+    utterance: str = Field(max_length=300)
+    today: str | None = None
+
+
 class TimeAnswerIn(BaseModel):
     token: str
     round_id: str
@@ -490,6 +496,11 @@ def time_rules(body: TimeRulesIn, s: Session = Depends(_session)):
 @app.post("/api/time/gathering")
 def time_gathering(body: TimeGatherIn, s: Session = Depends(_session)):
     return schedule_service.start_gathering(s, body.token, body.fields)
+
+
+@app.post("/api/time/say")
+def time_say(body: TimeSayIn, s: Session = Depends(_session)):
+    return schedule_chat.say(s, body.token, body.utterance, today=body.today)
 
 
 @app.post("/api/time/answer")

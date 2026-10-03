@@ -10,7 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from .db import get_session
-from .engine import home, rounds, schedule_service
+from .engine import home, rounds, schedule_chat, schedule_service
 
 mcp = FastMCP(
     "huddle",
@@ -224,3 +224,11 @@ def answer_gathering(
 ) -> dict[str, Any]:
     """Answer a find-a-time privately from the caller's own schedule (accept_suggestions) or by hand."""
     return _run(schedule_service.answer_gathering, token, round_id, answers, accept_suggestions)
+
+
+@mcp.tool()
+def ask_schedule_agent(token: str, utterance: str) -> dict[str, Any]:
+    """Talk to the scheduling agent in plain words: 'dinner with Priya Thursday 7pm for 2 hours', 'what's my
+    week', 'when am I free', 'cancel the dentist', 'find a time for drinks with Ben'. If something clashes it
+    suggests a way out and waits for your answer ('yes', 'keep both', 'skip it', 'move it to Friday 7pm')."""
+    return _run(schedule_chat.say, token, utterance)

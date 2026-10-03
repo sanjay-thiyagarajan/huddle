@@ -33,7 +33,7 @@ export interface HomeReport {
   heavy_chores?: number; heavy_rotated?: number; mental_chores?: number; mental_owners?: number; exempt_count?: number;
 }
 export interface HomeDecision {
-  round_id: string; mode: "care" | "everyday" | "trip"; title: string; state: "collecting" | "reminded" | "closed";
+  round_id: string; mode: "care" | "everyday" | "trip" | "when"; title: string; state: "collecting" | "reminded" | "closed";
   deadline_at: string; answered: boolean; answered_count: number; of: number; token: string; link: string; created: string;
 }
 export interface HomePlanSummary { round_id: string; mode: string; title: string; summary: string; at: string; checkin: string | null }

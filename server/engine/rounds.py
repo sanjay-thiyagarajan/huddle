@@ -478,6 +478,8 @@ def closed_plans(s: Session, household_id: str) -> list[dict]:
         res = r.result
         if r.mode == "care":
             summary = res["headline"]
+        elif r.mode == "when":
+            summary = f"{res['title']}: {res['plan']['label']}. {res['tradeoff']}"
         elif res.get("plan"):
             summary = f"{res['plan']['name']}, around {res['plan']['price_band']} per person"
         else:

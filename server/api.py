@@ -170,7 +170,12 @@ async def agent_tool(body: ToolIn):
 def agent_parse(body: ParseIn, s: Session = Depends(_session)):
     """Turn one person's words into a draft answer. Nothing is stored until they confirm."""
     mode = rounds.status(s, body.token)["mode"]
+    if mode == "when":
+        raise rounds.HuddleError("use_screen", USE_SCREEN, 400)
     return huddle_agent.parse_with_engine(mode, body.text)
+
+
+USE_SCREEN = "Answer a find-a-time on the screen: for each time, works, could move things, or can't."
 
 
 class VoiceTurnIn(BaseModel):
@@ -187,6 +192,8 @@ async def agent_turn(body: VoiceTurnIn, s: Session = Depends(_session)):
     info = rounds.status(s, body.token)
     if info["state"] == "closed":
         raise rounds.HuddleError("round_closed", "This round is closed.", 409)
+    if info["mode"] == "when":
+        raise rounds.HuddleError("use_screen", USE_SCREEN, 400)
     try:
         if body.session_id is None:
             sid, turn = dialogue.open_session(

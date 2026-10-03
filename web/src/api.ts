@@ -1,4 +1,5 @@
 export type Mode = "everyday" | "care" | "trip";
+export type RoundMode = Mode | "when";
 export type Channel = "voice" | "link";
 
 export interface Person { name: string; channel: Channel; is_host: boolean; token: string; link: string }
@@ -13,9 +14,12 @@ export interface NudgeResult { pending: string[]; deliveries: Delivery[]; messag
 export interface Hint { message: string; suggested_dealbreakers: string[] }
 export interface HouseholdPlan { round_id: string; mode: Mode; title: string; summary: string; at: string; checkin: string | null }
 export interface Status {
-  round_id: string; mode: Mode; state: "collecting" | "reminded" | "closed";
+  round_id: string; mode: RoundMode; state: "collecting" | "reminded" | "closed";
   deadline_at: string; reminder_at: string;
-  need: { tasks?: { id: string; label: string; hours: number }[]; dollars_per_month?: number };
+  need: {
+    tasks?: { id: string; label: string; hours: number }[]; dollars_per_month?: number;
+    slots?: string[]; title?: string; circle?: string; duration_minutes?: number;
+  };
   me: { name: string; is_host: boolean; answered: boolean };
   participants: { name: string; channel: Channel; answered: boolean }[];
   events: AuditEvent[];

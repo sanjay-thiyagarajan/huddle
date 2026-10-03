@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import AnswerForm from "../AnswerForm";
+import WhenAnswer from "../WhenAnswer";
 import Checkin from "../Checkin";
 import MyShare from "../MyShare";
 import NeedEditor, { DEFAULT_TASKS, needPayload } from "../NeedEditor";
 import type { TaskDraft } from "../NeedEditor";
 import { api } from "../api";
-import type { CheckinSummary, Hint, Result, ShareLine, Status } from "../api";
+import type { CheckinSummary, Hint, Mode, Result, ShareLine, Status } from "../api";
 import Reveal from "../reveal/Reveal";
 import { homeApi } from "./homeApi";
 import type { HomeDecision, HomeState } from "./homeApi";
@@ -106,8 +107,11 @@ function DecisionCard({ d, name, onChanged }: { d: HomeDecision; name: string; o
       {d.state !== "closed" && (
         d.answered ? (
           <p className="banner note" role="status">Your answer is saved and private. {d.answered_count} of {d.of} have answered. You can change it until everyone has.</p>
+        ) : d.mode === "when" ? (
+          status && <WhenAnswer title={status.need.title ?? "this"} slots={status.need.slots ?? []}
+            onSubmit={async (a) => { await api.submit(d.token, a); onChanged(); }} />
         ) : (
-          <AnswerForm mode={d.mode} token={d.token} name={name} hints={hints}
+          <AnswerForm mode={d.mode as Mode} token={d.token} name={name} hints={hints}
             onSubmit={async (a) => { await api.submit(d.token, a); onChanged(); }} />
         )
       )}

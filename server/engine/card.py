@@ -8,6 +8,8 @@ a private answer. Fairness and check-in lines also come from aggregate sources.
 def build_card(result: dict, checkin: dict | None = None) -> dict:
     care = result["mode"] == "care"
     title = {"care": "Care plan", "trip": "Trip plan"}.get(result["mode"], "Weekend plan")
+    if result["mode"] == "when":
+        title = "Time to meet"
     lines: list[str] = []
     for w in result.get("warnings", []):
         lines.append(f"Note: {w}")
@@ -32,6 +34,9 @@ def build_card(result: dict, checkin: dict | None = None) -> dict:
             lines.append(f"Plans in which each person held a heavy task: {held}.")
         lines.append(result["assignment_caveat"])
         lines.append(result["disclaimer"])
+    elif result["mode"] == "when":
+        lines.append(f"{result['title']}: {result['plan']['span']}.")
+        lines.append(result["tradeoff"])
     else:
         if result["plan"]:
             lines.append(f"Plan: {result['plan']['name']}, around {result['plan']['price_band']} per person.")

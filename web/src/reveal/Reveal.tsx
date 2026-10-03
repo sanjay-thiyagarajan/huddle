@@ -33,7 +33,8 @@ export default function Reveal({ result, onExplain, onCard }: {
   }
 
   const heading = care ? "Here's a care plan that fits everyone"
-    : result.mode === "trip" ? "Here's a trip that works for the group" : "Here's the plan";
+    : result.mode === "trip" ? "Here's a trip that works for the group"
+    : result.mode === "when" ? "Here's a time that works" : "Here's the plan";
   return (
     <section className="reveal" aria-labelledby="reveal-h">
       <h2 id="reveal-h">{heading}</h2>
@@ -45,7 +46,7 @@ export default function Reveal({ result, onExplain, onCard }: {
         </p>
       )}
 
-      {care ? <Care r={result} /> : <Everyday r={result} />}
+      {care ? <Care r={result} /> : result.mode === "when" ? <When r={result} /> : <Everyday r={result} />}
 
       {onCard && (
         <div className="explain row">
@@ -69,6 +70,19 @@ export default function Reveal({ result, onExplain, onCard }: {
       <p className="banner limits">{result.honest_limits}</p>
       {care && <p className="fine">{result.disclaimer}</p>}
     </section>
+  );
+}
+
+function When({ r }: { r: Result }) {
+  return (
+    <>
+      <p className="plan"><strong>{r.plan.label}</strong><span> ({r.plan.span})</span></p>
+      <p>{r.tradeoff}</p>
+      {r.counts && <p className="fine">{r.counts.can} can, {r.counts.flex} could move things, {r.counts.cannot} can't.</p>}
+      {r.alternatives.length > 0 && (
+        <p className="fine">Next best: {r.alternatives.map((a: Result) => a.label).join("; ")}.</p>
+      )}
+    </>
   );
 }
 

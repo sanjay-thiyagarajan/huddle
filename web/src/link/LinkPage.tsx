@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import AnswerForm from "../AnswerForm";
+import WhenAnswer from "../WhenAnswer";
 import Checkin from "../Checkin";
 import MyShare from "../MyShare";
 import { api } from "../api";
-import type { CheckinSummary, Result, ShareLine, Status } from "../api";
+import type { CheckinSummary, Mode, Result, ShareLine, Status } from "../api";
 import Reveal from "../reveal/Reveal";
 
 /** /r/<token>: a private page for one person, usable from any phone. */
@@ -80,7 +81,11 @@ export default function LinkPage({ token }: { token: string }) {
             onSubmit={async (score) => { await api.checkin(token, score); await refresh(); }} />
         </>
       )
-        : editing ? <AnswerForm mode={status.mode} token={token} name={status.me.name} initial={editing}
+        : status.mode === "when" && !status.me.answered && status.state !== "closed" ? (
+          <WhenAnswer title={status.need.title ?? "this"} slots={status.need.slots ?? []}
+            onSubmit={async (a) => { await api.submit(token, a); await refresh(); }} />
+        )
+        : editing ? <AnswerForm mode={status.mode as Mode} token={token} name={status.me.name} initial={editing}
             onSubmit={async (a) => { await api.submit(token, a); setEditing(null); await refresh(); }} />
         : status.me.answered ? (
           <>
@@ -89,7 +94,7 @@ export default function LinkPage({ token }: { token: string }) {
           </>
         )
         : status.state === "closed" ? <p className="banner note">This round has closed.</p>
-        : <AnswerForm mode={status.mode} token={token} name={status.me.name} hints={status.hints}
+        : <AnswerForm mode={status.mode as Mode} token={token} name={status.me.name} hints={status.hints}
             onSubmit={async (a) => { await api.submit(token, a); await refresh(); }} />}
     </main>
   );

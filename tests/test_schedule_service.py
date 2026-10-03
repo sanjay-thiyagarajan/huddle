@@ -274,3 +274,52 @@ def test_guests_must_be_named_and_members_must_exist(session, tok, rec):
         ss.start_gathering(session, tok["Maya"], {**GATHER, "members": ["Nobody"]}, MON, rec)
     with pytest.raises(rounds.HuddleError):
         ss.start_gathering(session, tok["Maya"], {**GATHER, "title": ""}, MON, rec)
+
+
+def test_household_state_still_loads_after_a_find_a_time_closes(session, tok, rec):
+    out = ss.start_gathering(session, tok["Maya"], {**GATHER, "guests": [], "members": ["Ben"]}, MON, rec)
+    for who in ("Maya", "Ben"):
+        ss.answer_gathering(session, tok[who], out["round_id"], None, True, MON)
+    for who in ("Maya", "Ben", "Chen"):
+        state = hm.get_state(session, tok[who], MON)
+        assert state["me"]["name"] == who
+    assert any(d["mode"] == "when" for d in hm.get_state(session, tok["Maya"], MON)["mine"]["decisions"])
+
+
+async def test_every_round_route_copes_with_a_find_a_time(fresh_db):
+    import httpx
+
+    from server import api
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.app), base_url="http://t") as c:
+        out = (await c.post("/api/home", json={"name": "H", "members": [{"name": n} for n in NAMES]})).json()
+        tk = {m["name"]: m["token"] for m in out["members"]}
+        g = (
+            await c.post(
+                "/api/time/gathering", json={"token": tk["Maya"], "fields": {**GATHER, "guests": []}}
+            )
+        ).json()
+        mine = g["my_token"]
+        r = await c.post("/api/agent/parse", json={"token": mine, "text": "any time works"})
+        assert r.status_code < 500, r.text
+        r = await c.post("/api/agent/turn", json={"token": mine})
+        assert r.status_code < 500, r.text
+        for who in ("Maya", "Ben"):
+            await c.post(
+                "/api/time/answer",
+                json={"token": tk[who], "round_id": g["round_id"], "accept_suggestions": True},
+            )
+        for path in (
+            "/api/status",
+            "/api/result",
+            "/api/plan-card",
+            "/api/agent/explain",
+            "/api/household",
+            "/me/answers",
+        ):
+            r = await c.get(path, params={"token": mine})
+            assert r.status_code < 500, (path, r.text)
+        r = await c.post("/api/checkin", json={"token": mine, "score": 4})
+        assert r.status_code < 500, r.text
+        r = await c.post("/api/nudge", params={"token": mine})
+        assert r.status_code < 500, r.text

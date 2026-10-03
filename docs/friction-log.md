@@ -82,3 +82,7 @@ Format per entry: task attempted, steps taken, expected vs actual, severity, wor
 - **Severity:** Low (cosmetic, but it can hide a test summary).
 - **Workaround:** Read pass/fail from the exit code or `grep` for "passed|failed" instead of relying on the last line.
 - **Suggestion:** Route HiGHS solver output through `options={"disp": False}` consistently (it still printed here), or document that some internal messages are not suppressed.
+
+## F-010: ruff format over a whole directory rewrites unrelated files (2026-10-03)
+Running `ruff format server tests` reformatted ~25 files I had not touched, twice. The repo only formats some modules,
+so format only the files being changed. Reverted with `git checkout` on the untouched ones.

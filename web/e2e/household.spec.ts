@@ -77,9 +77,12 @@ test("declining passes the request on privately; if nobody can, the group is tol
   const seen = new Set<string>();
   for (let round = 0; round < 3; round++) {
     let asked: string | null = null;
-    for (const n of ["Maya", "Ben", "Chen"]) {
-      await as(page, n);
-      if (await page.getByRole("region", { name: "Requests waiting for you" }).count()) asked = n;
+    for (let attempt = 0; attempt < (round === 2 ? 2 : 6) && !asked; attempt++) {
+      for (const n of ["Maya", "Ben", "Chen"]) {
+        await as(page, n);
+        // the offer shows once that person's state has loaded; give it a moment before moving on
+        if (await page.getByRole("region", { name: "Requests waiting for you" }).waitFor({ timeout: 1500 }).then(() => true, () => false)) { asked = n; break; }
+      }
     }
     if (!asked) break;
     seen.add(asked);

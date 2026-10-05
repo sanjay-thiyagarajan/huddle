@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from ..agent import chore_agent as ca
 from ..agent import schedule_agent as sa
 from ..db import Member
+from . import briefing
 from . import schedule as sc
 from . import schedule_service as ss
 from .rounds import HuddleError, now_utc
@@ -114,7 +115,7 @@ def say(
         _remember(me.id, None)
         merged = f"{pending['text']} {text}"
         parsed = sa.parse_commitment(merged, td)
-        if sa.interpret(text)["intent"] in ("week", "free", "cancel", "find") and parsed["questions"]:
+        if sa.interpret(text)["intent"] in ("week", "day", "export", "free", "cancel", "find") and parsed["questions"]:
             pending = None
         else:
             return _propose(s, token, me, parsed, merged, now, today)
@@ -177,6 +178,18 @@ def say(
     kind = intent["intent"]
     if kind == "week":
         return _week(s, token, me, now, today)
+    if kind == "day":
+        day = (td + timedelta(days=1)).isoformat() if intent["tomorrow"] else None
+        out = briefing.get_briefing(s, token, day, now, today)
+        return _reply(out["say"], "day", next_free=out["next_free"])
+    if kind == "export":
+        what = "chore_plan" if intent["chores"] else "my_time"
+        return _reply(
+            "I can't hand over a file by voice. Open My time and press Export to calendar, "
+            "and you'll get an .ics file for Outlook, Google or Apple Calendar.",
+            "export",
+            next={"action": "export_calendar", "kind": what},
+        )
     if kind == "free":
         return _free(s, me, td)
     if kind == "cancel":

@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from . import config
 from .agent import dialogue, huddle_agent
 from .db import VoiceProfile, get_session, init_db
-from .engine import home, rounds, schedule_chat, schedule_service
+from .engine import briefing, home, rounds, schedule_chat, schedule_service
 from .mcp_server import mcp
 from .voice import speaker_id, stt
 
@@ -30,7 +30,7 @@ log = logging.getLogger("huddle.scheduler")
 
 def _run_tick() -> int:
     with get_session() as s:
-        return len(rounds.tick(s)) + len(home.tick(s))
+        return len(rounds.tick(s)) + len(home.tick(s)) + len(schedule_service.tick(s))
 
 
 async def _scheduler():
@@ -408,6 +408,32 @@ class TimeAnswerIn(BaseModel):
     accept_suggestions: bool = False
 
 
+class TimeImportIn(BaseModel):
+    token: str
+    ics: str = Field(max_length=2_000_000)
+    circle: str = "personal"
+    today: str | None = None
+
+
+class TimeExportIn(BaseModel):
+    token: str
+    kind: str = "my_time"
+    today: str | None = None
+
+
+class TimeSubscribeIn(BaseModel):
+    token: str
+    url: str | None = Field(default=None, max_length=2000)  # no url removes the subscription
+    circle: str = "personal"
+    today: str | None = None
+    refresh: bool = False  # with no url: read the saved address again now
+
+
+class TimeRemindersIn(BaseModel):
+    token: str
+    changes: dict
+
+
 class HomeSayIn(BaseModel):
     token: str
     utterance: str = Field(max_length=300)
@@ -508,6 +534,35 @@ def time_gathering(body: TimeGatherIn, s: Session = Depends(_session)):
 @app.post("/api/time/say")
 def time_say(body: TimeSayIn, s: Session = Depends(_session)):
     return schedule_chat.say(s, body.token, body.utterance, today=body.today)
+
+
+@app.get("/api/time/briefing")
+def time_briefing(
+    token: str, day: str | None = None, today: str | None = None, s: Session = Depends(_session)
+):
+    return briefing.get_briefing(s, token, day, today=today)
+
+
+@app.post("/api/time/import")
+def time_import(body: TimeImportIn, s: Session = Depends(_session)):
+    return schedule_service.import_calendar(s, body.token, body.ics, body.circle, today=body.today)
+
+
+@app.post("/api/time/export")
+def time_export(body: TimeExportIn, s: Session = Depends(_session)):
+    return schedule_service.export_calendar(s, body.token, body.kind, today=body.today)
+
+
+@app.post("/api/time/subscribe")
+def time_subscribe(body: TimeSubscribeIn, s: Session = Depends(_session)):
+    return schedule_service.subscribe_calendar(
+        s, body.token, body.url, body.circle, today=body.today, refresh=body.refresh
+    )
+
+
+@app.post("/api/time/reminders")
+def time_reminders(body: TimeRemindersIn, s: Session = Depends(_session)):
+    return schedule_service.set_reminder_prefs(s, body.token, body.changes)
 
 
 @app.post("/api/time/answer")

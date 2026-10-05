@@ -38,6 +38,7 @@ EXPIRE_AFTER = timedelta(hours=24)
 DECLINE_REASONS = ("cannot", "busy", "prefer_not", "other")
 EXEMPT_CAP, EXEMPT_WINDOW_WEEKS = 2, 8
 HISTORY_WEEKS = 8
+PRIVATE_EVENT_KINDS = ("starting_soon", "digest")  # one person's own schedule reminders (see schedule_service)
 PUBLIC_STATUS = {
     "unassigned": "open",
     "proposed": "pending",
@@ -937,6 +938,8 @@ def get_state(s: Session, token: str, now: datetime | None = None) -> dict:
                     HomeEvent.home_id == home.id,
                     HomeEvent.kind != "notified",
                     HomeEvent.kind != "profile_updated",
+                    # reminders about one person's own schedule are bookkeeping, never shown to the household
+                    HomeEvent.kind.not_in(PRIVATE_EVENT_KINDS),
                 )
                 .order_by(HomeEvent.id.desc())
             ).all()[:30]

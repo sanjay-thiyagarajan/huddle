@@ -112,7 +112,7 @@ def test_strands_mcp_client_discovers_and_calls_huddle_tools(live_server):
 
     url = f"{live_server}/mcp"
     names = host.discover(url)
-    assert len(names) == 25 and {"ask_household_agent", "submit_private_answer"} <= set(names)
+    assert len(names) == 30 and {"ask_household_agent", "submit_private_answer"} <= set(names)
     with host.connect(url) as client:
         name, token = host._household(client)
         state = client.call_tool_sync("t-1", "get_household", {"token": token})

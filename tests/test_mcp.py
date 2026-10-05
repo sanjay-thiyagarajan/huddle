@@ -50,6 +50,11 @@ async def test_protocol_version_tools_and_full_round(live_server):
                 "start_gathering",
                 "answer_gathering",
                 "ask_schedule_agent",
+                "get_daily_briefing",
+                "import_calendar",
+                "export_calendar",
+                "subscribe_calendar",
+                "set_reminder_prefs",
             }
 
             r = (
@@ -116,14 +121,19 @@ async def test_host_guidance_titles_and_behaviour_hints(live_server):
             assert "can hear" in init.instructions and "consent" in init.instructions
             tools = {t.name: t for t in (await sess.list_tools()).tools}
 
-    assert len(tools) == 25
+    assert len(tools) == 30
     hints = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
     for name, t in tools.items():
         assert t.title and t.description, name
         # The protocol defaults are destructive and open-world, so every hint is set explicitly.
         assert all(getattr(t.annotations, h) is not None for h in hints), name
         assert t.outputSchema, name  # structured results, not JSON in a text block
-    assert {n for n, t in tools.items() if t.annotations.readOnlyHint} == {"get_household", "get_my_time"}
+    assert {n for n, t in tools.items() if t.annotations.readOnlyHint} == {
+        "get_household",
+        "get_my_time",
+        "get_daily_briefing",
+        "export_calendar",
+    }
     assert {n for n, t in tools.items() if t.annotations.destructiveHint} == {
         "close_round",
         "plan_week",
@@ -140,6 +150,7 @@ async def test_host_guidance_titles_and_behaviour_hints(live_server):
         "start_household_decision",
         "start_gathering",
         "ask_schedule_agent",
+        "subscribe_calendar",  # makes outbound requests to the calendar address
     }
 
     # The answer shape a host needs is in the tool description, with the engines' own vocabulary.

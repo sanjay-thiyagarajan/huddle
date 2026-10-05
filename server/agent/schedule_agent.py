@@ -197,6 +197,16 @@ _FIND = re.compile(
     re.I,
 )
 _RULES = re.compile(r"\b(always|never|protect|keep .* free|no more than|at most)\b", re.I)
+_DAY = re.compile(
+    r"\bmy day\b|\bbriefing\b|\b(?:what'?s|what is|show|tell me|how'?s)\b.*\b(?:today|tomorrow)\b"
+    r"|\bwhat (?:do i|have i got|am i doing)\b.*\b(?:today|tomorrow)\b",
+    re.I,
+)
+_EXPORT = re.compile(
+    r"\b(export|download)\b.*\b(calendar|schedule|week|chores?|commitments)\b"
+    r"|\b(send|add|put)\b.*\b(to|into|in)\b.*\b(calendar|outlook|google)\b",
+    re.I,
+)
 
 REPLIES = [  # (choice, pattern), most specific first
     ("keep_both", r"\b(both|double[- ]?book|keep (?:them )?both)\b"),
@@ -237,6 +247,10 @@ def interpret(text: str) -> dict:
         return {"intent": "find"}
     if _FREE.search(text):
         return {"intent": "free"}
+    if _EXPORT.search(text):
+        return {"intent": "export", "chores": bool(re.search(r"\bchores?\b", text, re.I))}
+    if _DAY.search(text) and not re.search(r"\bweek\b", text, re.I):
+        return {"intent": "day", "tomorrow": bool(re.search(r"\btomorrow\b", text, re.I))}
     if _WEEK.search(text):
         return {"intent": "week"}
     m = _CANCEL.match(text.strip())

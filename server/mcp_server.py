@@ -12,7 +12,7 @@ from mcp.types import ToolAnnotations
 from typing_extensions import NotRequired, TypedDict
 
 from .db import get_session
-from .engine import care, everyday, home, rounds, schedule_chat, schedule_service, trip
+from .engine import briefing, care, everyday, home, rounds, schedule_chat, schedule_service, trip
 
 # What a host needs to know before it speaks for Huddle on a shared device. It is sent in the
 # initialize result, so an agent that has never seen this repository can still behave correctly.
@@ -31,7 +31,9 @@ INSTRUCTIONS = (
     "6. Huddle is a decision aid, not medical, legal or financial advice. Do not ask for health details.\n"
     "Tool groups: family decisions (start_huddle ... revisit_round), household chores "
     "(create_household ... ask_household_agent) and the caller's own schedule (get_my_time ... "
-    "ask_schedule_agent). For free speech, prefer ask_household_agent and ask_schedule_agent."
+    "ask_schedule_agent, plus get_daily_briefing, calendar files and reminders). For free speech, prefer "
+    "ask_household_agent and ask_schedule_agent. A calendar address given to subscribe_calendar is like a "
+    "password: never say it back."
 )
 
 mcp = FastMCP(
@@ -295,6 +297,48 @@ def answer_gathering(
 ) -> dict[str, Any]:
     """Answer a find-a-time privately from the caller's own schedule (accept_suggestions) or by hand."""
     return _run(schedule_service.answer_gathering, token, round_id, answers, accept_suggestions)
+
+
+@mcp.tool(title="My day", annotations=_hints(read_only=True, idempotent=True))
+def get_daily_briefing(token: str, day: str | None = None) -> dict[str, Any]:
+    """The caller's own day (default today; or day 'YYYY-MM-DD'): commitments and clashes, chores due, chore offers
+    and decisions waiting for their private answer, and the next free hour. `say` is the same as sentences to read
+    aloud. Only the caller's own items; read it for 'what's my day' or 'what's on today'."""
+    return _run(briefing.get_briefing, token, day)
+
+
+@mcp.tool(title="Read a calendar file", annotations=_hints())
+def import_calendar(token: str, ics: str, circle: str = "personal") -> dict[str, Any]:
+    """Read the events in an .ics calendar file the person exported (Outlook, Google, Apple) as their own private
+    commitments. circle: family|friends|work|personal. Reading the same file again updates rather than duplicates.
+    Returns counts and notes only; all-day events and complicated repeats are skipped and counted."""
+    return _run(schedule_service.import_calendar, token, ics, circle)
+
+
+@mcp.tool(title="Export to a calendar file", annotations=_hints(read_only=True, idempotent=True))
+def export_calendar(token: str, kind: str = "my_time") -> dict[str, Any]:
+    """The caller's own commitments (kind 'my_time') or their planned chores (kind 'chore_plan') as an .ics file
+    they can add to any calendar app. Returns {filename, ics, count}."""
+    return _run(schedule_service.export_calendar, token, kind)
+
+
+@mcp.tool(title="Follow a calendar address", annotations=_hints(idempotent=True, open_world=True))
+def subscribe_calendar(
+    token: str, url: str | None = None, circle: str = "personal", refresh: bool = False
+) -> dict[str, Any]:
+    """Keep the caller's commitments in step with a read-only calendar address (the https or webcal link Outlook,
+    Google and Apple can publish), refreshed about hourly. Treat the address like a password: never repeat it.
+    Pass no url to stop following, or no url and refresh=true to read the saved address again right now;
+    commitments already read stay."""
+    return _run(schedule_service.subscribe_calendar, token, url, circle, refresh=refresh)
+
+
+@mcp.tool(title="Set my reminders", annotations=_hints(idempotent=True))
+def set_reminder_prefs(token: str, changes: dict) -> dict[str, Any]:
+    """Private to the caller: kinds (any of starting_soon, digest), quiet_start and quiet_end ('HH:MM', both or
+    neither) and utc_offset_minutes (their time minus the server's clock). Reminders go in the app and, if the
+    person gave an address, by email; nothing is sent to a speaker."""
+    return _run(schedule_service.set_reminder_prefs, token, changes)
 
 
 @mcp.tool(title="Talk to the scheduling agent", annotations=_hints(open_world=True))

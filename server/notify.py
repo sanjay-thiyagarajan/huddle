@@ -95,12 +95,15 @@ _HOME_LINES = {
         "Have a look on your page."
     ),
     "nudge": "A request for '{title}' has been waiting. If you don't answer it will go to someone else.",
+    "starting_soon": "Coming up soon on your own schedule: {title}.",
+    "digest": "Your week ahead: {title}.",
 }
+_HOME_SUBJECTS = {"starting_soon": "Huddle: coming up soon", "digest": "Huddle: your week ahead"}
 
 
 def home_message(kind: str, name: str, title: str, link: str) -> tuple[str, str]:
     """Reminder text for the household. Names only the recipient; never says who else was asked."""
-    subject = "Huddle: your household chores"
+    subject = _HOME_SUBJECTS.get(kind, "Huddle: your household chores")
     body = f"Hi {name},\n\n" + _HOME_LINES[kind].format(title=title) + f"\n\nOpen your page: {link}\n"
     return subject, body
 

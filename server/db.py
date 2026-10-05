@@ -230,6 +230,35 @@ class ScheduleRule(SQLModel, table=True):
     updated_at: NaiveDatetime | None = None
 
 
+class CalendarImport(SQLModel, table=True):
+    """Which commitment an imported calendar event became, so importing the same file again updates it.
+    The uid is the event's own id from the .ics file. Owner-only, like the commitment it points to."""
+    member_id: str = Field(primary_key=True)
+    uid: str = Field(primary_key=True)
+    commitment_id: str
+
+
+class CalendarFeed(SQLModel, table=True):
+    """PRIVATE: a subscribed calendar address. The url works like a password, so it is never returned by any
+    route or written to a log; only whether it is subscribed and how the last refresh went."""
+    member_id: str = Field(primary_key=True)
+    url: str
+    circle: str = "personal"
+    last_fetched: NaiveDatetime | None = None
+    last_status: str = "waiting"  # waiting | ok | failed
+    failures: int = 0
+
+
+class ReminderPref(SQLModel, table=True):
+    """PRIVATE: which reminders this person wants, and when not to send them. Owner-only."""
+    member_id: str = Field(primary_key=True)
+    kinds: list = Field(default_factory=list, sa_column=Column(JSON))  # starting_soon | digest
+    quiet_start: str | None = None  # "HH:MM", in the person's own time
+    quiet_end: str | None = None
+    utc_offset_minutes: int = 0  # their local time minus the server's clock, because times are floating
+    updated_at: NaiveDatetime | None = None
+
+
 class VoiceProfile(SQLModel, table=True):
     """Biometric stand-in data: enrolment embeddings per household profile (never raw audio)."""
 

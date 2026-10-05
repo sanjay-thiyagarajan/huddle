@@ -60,5 +60,5 @@ jobs:
       - name: A non-Python MCP client (Inspector CLI) lists the tools over Streamable HTTP
         run: |
           npx -y @modelcontextprotocol/inspector@2.9.0 --cli http://localhost:8000/mcp --transport http --method tools/list > tools.json
-          test "$(jq '.tools | length' tools.json)" = "25"
-          test "$(jq '[.tools[] | select(.annotations.readOnlyHint)] | length' tools.json)" = "2"
+          test "$(jq '.tools | length' tools.json)" = "30"
+          test "$(jq '[.tools[] | select(.annotations.readOnlyHint)] | length' tools.json)" = "4"

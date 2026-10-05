@@ -2,6 +2,7 @@
 or Y's exact bucket next to Y's name. Covers every REST route and every MCP tool."""
 
 import json
+from datetime import datetime
 
 import httpx
 import pytest
@@ -57,6 +58,11 @@ COVERED_ROUTES = {
     "/api/time/gathering",
     "/api/time/answer",
     "/api/time/say",
+    "/api/time/briefing",
+    "/api/time/import",
+    "/api/time/export",
+    "/api/time/subscribe",
+    "/api/time/reminders",
 }
 # Voice routes take audio, not tokens, and return no answers: asserted in test_voice.py.
 VOICE_ROUTES = {
@@ -92,6 +98,11 @@ COVERED_TOOLS = {
     "start_gathering",
     "answer_gathering",
     "ask_schedule_agent",
+    "get_daily_briefing",
+    "import_calendar",
+    "export_calendar",
+    "subscribe_calendar",
+    "set_reminder_prefs",
 }
 
 
@@ -662,3 +673,157 @@ async def test_leak_time_routes_never_show_one_person_another_persons_schedule(f
                 assert secret not in body, f"{who} saw Maya's private commitment"
         res = await c.get("/api/result", params={"token": g["my_token"]})
         assert secret not in res.text and "Ben" not in json.dumps(res.json().get("result", {}))
+
+
+# ---- calendar files, the daily briefing and reminders: one person's schedule stays theirs --------
+
+CAL_TITLE = "Zq7SentinelCalendarEvent"
+FEED_SECRET = "Zq9SentinelFeedAddress"
+FEED_URL = f"https://calendar.example.com/ical/{FEED_SECRET}/basic.ics"
+CAL_TEXT = (
+    "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:leak1\r\n"
+    f"SUMMARY:{CAL_TITLE}\r\nDTSTART:20261008T170000\r\nDTEND:20261008T180000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+)
+
+
+def _no_calendar_leak(label, body, viewer, owner="Maya"):
+    if viewer != owner:
+        assert CAL_TITLE not in body, f"{label} as {viewer} exposed {owner}'s imported event"
+    assert FEED_SECRET not in body, f"{label} as {viewer} returned the subscribed address"
+
+
+async def test_leak_calendar_routes_never_show_one_person_another_persons_events(fresh_db, monkeypatch):
+    from server.engine import schedule_service as ss
+
+    monkeypatch.setattr(ss, "_fetch_feed", lambda url: CAL_TEXT)
+    transport = httpx.ASGITransport(app=api.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+        made = (
+            await c.post("/api/home", json={"name": "H", "members": [{"name": n} for n in EVERYDAY]})
+        ).json()
+        tok = {m["name"]: m["token"] for m in made["members"]}
+        owned = await c.post(
+            "/api/time/import", json={"token": tok["Maya"], "ics": CAL_TEXT, "circle": "family"}
+        )
+        assert owned.status_code == 200 and CAL_TITLE not in owned.text  # counts only
+        sub = await c.post("/api/time/subscribe", json={"token": tok["Maya"], "url": FEED_URL})
+        assert sub.status_code == 200 and FEED_SECRET not in sub.text
+        await c.post(
+            "/api/time/reminders",
+            json={"token": tok["Maya"], "changes": {"kinds": ["starting_soon", "digest"]}},
+        )
+        for viewer, t in tok.items():
+            bodies = {
+                "time": (await c.get("/api/time", params={"token": t, "week": "2026-10-05"})).text,
+                "briefing": (
+                    await c.get("/api/time/briefing", params={"token": t, "day": "2026-10-08"})
+                ).text,
+                "export my_time": (
+                    await c.post("/api/time/export", json={"token": t, "kind": "my_time"})
+                ).text,
+                "export chore_plan": (
+                    await c.post("/api/time/export", json={"token": t, "kind": "chore_plan"})
+                ).text,
+                "reminders": (await c.post("/api/time/reminders", json={"token": t, "changes": {}})).text,
+                "home state": (await c.get("/api/home/state", params={"token": t})).text,
+                "home say": (
+                    await c.post("/api/home/say", json={"token": t, "utterance": "what's on my plate"})
+                ).text,
+                "say day": (
+                    await c.post("/api/time/say", json={"token": t, "utterance": "what's my day"})
+                ).text,
+            }
+            for label, body in bodies.items():
+                _no_calendar_leak(label, body, viewer)
+        # the owner does get her own event back, from the export and the briefing
+        mine = (await c.post("/api/time/export", json={"token": tok["Maya"], "kind": "my_time"})).json()
+        assert CAL_TITLE in mine["ics"]
+        day = (await c.get("/api/time/briefing", params={"token": tok["Maya"], "day": "2026-10-08"})).json()
+        assert CAL_TITLE in day["say"]
+        # reminders sent by the scheduler leave nothing about her schedule in the household's shared trail
+        from server import db
+
+        with db.get_session() as s:
+            ss.tick(s, datetime(2026, 10, 8, 16, 45), deliver=lambda **kw: [])
+        for viewer, t in tok.items():
+            events = (await c.get("/api/home/state", params={"token": t})).json()["events"]
+            _no_calendar_leak("household events", json.dumps(events), viewer)
+            assert not [e for e in events if e["kind"] in ("starting_soon", "digest")]
+
+
+async def test_leak_calendar_mcp_tools_as_every_member(live_server, monkeypatch):
+    from server.engine import schedule_service as ss
+
+    monkeypatch.setattr(ss, "_fetch_feed", lambda url: CAL_TEXT)
+    async with streamable_http_client(f"{live_server}/mcp") as (rd, wr, _):
+        async with ClientSession(rd, wr) as sess:
+            await sess.initialize()
+            made = await sess.call_tool(
+                "create_household", {"name": "Home", "members": [{"name": n} for n in EVERYDAY]}
+            )
+            tok = {m["name"]: m["token"] for m in made.structuredContent["members"]}
+
+            async def call(tool, args, viewer):
+                res = await sess.call_tool(tool, args)
+                assert not res.isError, (tool, res.content)
+                body = json.dumps([x.model_dump() for x in res.content]) + json.dumps(res.structuredContent)
+                _no_calendar_leak(tool, body, viewer)
+                return res
+
+            await call("import_calendar", {"token": tok["Maya"], "ics": CAL_TEXT, "circle": "work"}, "Maya")
+            await call("subscribe_calendar", {"token": tok["Maya"], "url": FEED_URL}, "Maya")
+            for viewer, t in tok.items():
+                await call(
+                    "set_reminder_prefs", {"token": t, "changes": {"kinds": ["starting_soon"]}}, viewer
+                )
+                await call("get_daily_briefing", {"token": t, "day": "2026-10-08"}, viewer)
+                await call("export_calendar", {"token": t, "kind": "my_time"}, viewer)
+                await call("export_calendar", {"token": t, "kind": "chore_plan"}, viewer)
+                await call("get_my_time", {"token": t, "week": "2026-10-05"}, viewer)
+                await call("ask_schedule_agent", {"token": t, "utterance": "what's my day"}, viewer)
+            mine = await sess.call_tool("export_calendar", {"token": tok["Maya"], "kind": "my_time"})
+            assert CAL_TITLE in mine.structuredContent["ics"]
+            await call("subscribe_calendar", {"token": tok["Maya"]}, "Maya")  # no url: unsubscribe
+
+
+async def test_leak_the_starting_soon_banner_is_only_the_owners(fresh_db):
+    from datetime import timedelta
+
+    from server.engine.rounds import now_utc
+
+    soon = now_utc() + timedelta(minutes=10)
+    transport = httpx.ASGITransport(app=api.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+        made = (
+            await c.post("/api/home", json={"name": "H", "members": [{"name": n} for n in EVERYDAY]})
+        ).json()
+        tok = {m["name"]: m["token"] for m in made["members"]}
+        for who in tok:
+            await c.post(
+                "/api/time/reminders", json={"token": tok[who], "changes": {"kinds": ["starting_soon"]}}
+            )
+        added = await c.post(
+            "/api/time/commitments",
+            json={
+                "token": tok["Maya"],
+                "fields": {
+                    "title": CAL_TITLE,
+                    "circle": "personal",
+                    "start": soon.isoformat(timespec="minutes"),
+                    "minutes": 30,
+                },
+                "today": soon.date().isoformat(),
+            },
+        )
+        assert added.status_code == 200 and added.json()["created"]
+        for viewer, t in tok.items():
+            res = await c.get("/api/time", params={"token": t})
+            body = res.text
+            if viewer == "Maya":
+                assert CAL_TITLE in json.dumps(res.json()["reminders"]["due"]), (
+                    "the owner's banner should list it"
+                )
+            else:
+                assert CAL_TITLE not in body and res.json()["reminders"]["due"] == [], (
+                    f"{viewer} saw Maya's banner"
+                )

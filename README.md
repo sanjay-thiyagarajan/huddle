@@ -49,7 +49,7 @@ flowchart TB
 
 **And your own time sits across all of it.** *My time* keeps one person's family, friends, work and personal commitments in one private schedule. Tell the agent in plain words, and when two things clash it explains the clash, suggests a way out and waits for your choice. *Find a time* asks friends, colleagues or family from each person's own schedule and returns a time and a trade-off, never who couldn't make which. The week's free time suggests a realistic chore availability. See [docs/scheduling.md](docs/scheduling.md).
 
-Huddle decides; it doesn't hire nurses, book providers, move money, split expenses, sync with external calendars, or give medical, legal or financial advice. Care mode collects no health data. When the family can't cover a parent's care between them, the plan suggests paid help as one option at a placeholder rate.
+Huddle decides; it doesn't hire nurses, book providers, move money, split expenses, sign in to Outlook, Google or Apple Calendar, or give medical, legal or financial advice. (It can read a calendar file or a read-only calendar address you give it; that is not a calendar sync, see [docs/scheduling.md](docs/scheduling.md).) Care mode collects no health data. When the family can't cover a parent's care between them, the plan suggests paid help as one option at a placeholder rate.
 
 ## What Huddle does
 
@@ -61,7 +61,7 @@ Huddle decides; it doesn't hire nurses, book providers, move money, split expens
 6. **Talks plainly**: "what's on my plate", "I did the bins", "who has the laundry", by typing, speaking, or through the MCP tools.
 7. **Reminds people for real**: a scheduler sends reminders in-app and, if the host entered an address, by email, plus a stated default if someone never answers.
 8. **Checks in afterwards**: privately after a decision, and privately after each chore week.
-9. **Looks after your own time.** Commitments across family, friends, work and personal life, clashes settled by conversation, rules it learns, and find-a-time with guests by link.
+9. **Looks after your own time.** Commitments across family, friends, work and personal life, clashes settled by conversation, rules it learns, and find-a-time with guests by link. **"What's my day?"** reads out your own commitments, clashes, chores due and decisions waiting for you. You can **bring a calendar in** from an Outlook, Google or Apple `.ics` file (or a read-only calendar address), **take your commitments or chores out** as `.ics`, and turn on **opt-in reminders** (starting soon, and a Sunday week-ahead note). In the simulator you can say "what's my day" and hear it read back (the browser's voice standing in for the assistant; not verified on a real Alexa).
 10. **Hands over a plan card** the assistant can read aloud, and a copyable weekly chore plan.
 
 How the chore agent decides, what is private and what is visible, and where its limits are: [docs/fairness-agent.md](docs/fairness-agent.md).
@@ -76,7 +76,7 @@ Answering a private number out loud can be overheard, so the **voice-only mode**
 - In the household, each member's availability, preferences, skills, exemptions, decline reasons and how a week felt are returned only to them. The group sees chores, who owns them, and an aggregate fairness report; the audit trail never says who was asked or why.
 - Matching is private, not cryptographic: with three or more people, who set a limit stays hidden; with two people, the other person can work out your number, and the app says so.
 - Voice identification is a stand-in for Alexa person recognition. It separates profiles on a shared device; it does not authenticate anyone.
-- Commitments, schedule rules and the reasons behind a find-a-time answer are returned only to their owner. A find-a-time result is a time and a trade-off, with a count only when three or more answered.
+- Commitments (including any read from a calendar file), schedule rules, reminder settings and the reasons behind a find-a-time answer are returned only to their owner. A subscribed calendar address is never returned to anyone, not even its owner, and reminder bookkeeping stays out of the household's shared audit trail. A find-a-time result is a time and a trade-off, with a count only when three or more answered.
 - An automated **leak test** seeds distinctive values and calls every route and MCP tool as every participant, failing if anyone else's value appears.
 
 ## How a family decision works
@@ -192,12 +192,13 @@ flowchart LR
 
 | Layer | Where | What it does |
 |---|---|---|
-| MCP server | `server/mcp_server.py` | Twenty-five tools over Streamable HTTP (seven for family decisions, eleven for the household, seven for personal and family scheduling), called at runtime by the household agent |
+| MCP server | `server/mcp_server.py` | Thirty tools over Streamable HTTP (seven for family decisions, eleven for the household, twelve for personal and family scheduling), called at runtime by the household agent |
 | Privacy engine | `server/engine/privacy.py` | Bands, the k rule, the leak guard |
 | Round service | `server/engine/rounds.py` | Lifecycle, answers, revision, check-in, household chain, reminders, audit trail |
 | Decision engines | `server/engine/care.py`, `everyday.py`, `trip.py` | Care split via `scipy.optimize.milp`; weekend and trip matching |
 | Chore planner | `server/engine/chores.py` | Fair weekly split of household chores (integer program): hard limits, fair share by private availability, ledger, preferences, rotation |
-| Scheduling | `server/engine/schedule.py`, `schedule_service.py`, `schedule_chat.py`, `when.py`, `server/agent/schedule_agent.py` | One person's private commitments across family, friends, work and personal; clash options with a recommendation; rules; the plain-words clash conversation; find-a-time as a decision mode |
+| Scheduling | `server/engine/schedule.py`, `schedule_service.py`, `schedule_chat.py`, `when.py`, `server/agent/schedule_agent.py` | One person's private commitments across family, friends, work and personal; clash options with a recommendation; rules; the plain-words clash conversation; find-a-time as a decision mode; reminders and subscribed calendars on the scheduler tick |
+| Calendar files and briefing | `server/engine/ical.py`, `server/engine/briefing.py` | A small, honest iCalendar reader and writer (counts what it can't read instead of guessing); the day as data and as sentences to read aloud |
 | Household service | `server/engine/home.py` | Persistent households, private profiles, ad hoc and pre-planned chores, offers (ask, accept, decline, re-ask), ledger, reminders, weekly auto-plan |
 | Household agent | `server/agent/` | Mock parser by default; Strands agent on Bedrock in `aws` mode; the voice-only dialogue; chores understood from plain words |
 | Voice | `server/voice/` | SpeechBrain ECAPA speaker identification and local Whisper transcription |
@@ -282,7 +283,12 @@ Streamable HTTP at `/mcp`, protocol version 2025-11-25 (official `mcp` Python SD
 | `set_schedule_rules` | Private: which circle wins a clash, protected times, work hours, most evenings out, buffer |
 | `start_gathering` | Find a time with household members and guests; guests get a private link |
 | `answer_gathering` | Answer a find-a-time from the caller's own schedule, or by hand |
-| `ask_schedule_agent` | Plain words: "dinner with Priya Thursday 7pm", "what's my week", "when am I free", "find a time for drinks with Ben" |
+| `ask_schedule_agent` | Plain words: "dinner with Priya Thursday 7pm", "what's my week", "what's my day", "when am I free", "find a time for drinks with Ben" |
+| `get_daily_briefing` | The caller's own day: commitments and clashes, chores due, offers and decisions waiting, the next free hour, and the same as sentences to read aloud |
+| `import_calendar` | Read an `.ics` file the person exported as their own private commitments (counts back, never titles); reading it again updates |
+| `export_calendar` | The caller's own commitments, or their planned chores as all-day entries, as an `.ics` file |
+| `subscribe_calendar` | Follow a read-only calendar address, re-read about hourly (or now, with `refresh`); the address is never returned. No address stops it |
+| `set_reminder_prefs` | Private: opt in to starting-soon reminders and a Sunday digest, quiet hours, and the person's offset from the server clock |
 
 **Written for a host that has never seen this repository.** An Alexa+ agent learns a server from what it sends, so the server says how to behave:
 
@@ -346,7 +352,8 @@ Optional extras: `pip install '.[voice]'` (speaker ID and Whisper), `pip install
 
 ```
 server/            FastAPI app, MCP server, engines, agent, voice, notifier
-  engine/          privacy, rounds, care, everyday, trip, plan card, chores (fair planner), home (household service)
+  engine/          privacy, rounds, care, everyday, trip, plan card, chores (fair planner), home (household service),
+                   scheduling, ical (calendar files), briefing (the day)
   agent/           answer parsing, voice-only dialogue, chore understanding, prompts, Strands agent
   voice/           speaker identification, transcription
 web/               React + Vite simulator and private link pages; Playwright tests
@@ -358,8 +365,8 @@ docs/              plan, architecture notes, accuracy reports, friction log, pro
 
 ## Verification
 
-- 289 automated tests, including the privacy leak test across every REST route and MCP tool (with a full household lifecycle of profiles, plans, offers, declines and check-ins), protocol tests asserting the negotiated MCP version and that every tool carries a title, behaviour hints and an output schema, the fairness engine's hard-limit, fairness, preference, rotation and ledger properties, the chore agent's parsing and intents, the scheduler, real SMTP delivery against a local mail sink, and an end-to-end run of a fictional family through speaker ID, Whisper, the voice-only dialogue and the MCP tools ([docs/family-simulation.md](docs/family-simulation.md)).
-- 30 Playwright browser tests covering the flows, the household with decisions and chores together, reminders, voice-only privacy, phone width, and accessibility (axe, WCAG A and AA) in light and dark.
+- 402 automated tests, including the privacy leak test across every REST route and MCP tool (with a full household lifecycle of profiles, plans, offers, declines and check-ins, and a planted calendar event and calendar address checked on every calendar, briefing, export and reminder route and tool), protocol tests asserting the negotiated MCP version and that every tool carries a title, behaviour hints and an output schema, the fairness engine's hard-limit, fairness, preference, rotation and ledger properties, the chore agent's parsing and intents, the iCalendar reader and writer, the calendar address guards (private networks, redirects, size), the daily briefing, the scheduler and reminders, real SMTP delivery against a local mail sink, and an end-to-end run of a fictional family through speaker ID, Whisper, the voice-only dialogue and the MCP tools ([docs/family-simulation.md](docs/family-simulation.md)).
+- 34 Playwright browser tests (33 pass and 1 is skipped without the optional voice packages; last run on Node 24, Windows, Chrome) covering the flows, calendar files, the day card, the starting-soon banner and spoken replies (with the browser's voice and microphone stubbed, so it checks what would be said, not how it sounds), the household with decisions and chores together, reminders, voice-only privacy, phone width, and accessibility (axe, WCAG A and AA) in light and dark.
 - Voice accuracy report: [docs/voice-accuracy.md](docs/voice-accuracy.md).
 
 ## Documentation

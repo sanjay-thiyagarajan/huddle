@@ -113,3 +113,12 @@ so format only the files being changed. Reverted with `git checkout` on the unto
 - **Severity:** Low.
 - **Workaround:** Swapped `gallery.jpg` for `original.png` in the image URLs.
 - **Suggestion:** Return the original's URL in the upload response as well, and say which sizes exist.
+
+## F-014: Playwright refuses to run on Node 18, and the repo's tooling assumes a POSIX shell (2026-10-04)
+- **Task attempted:** Run a new browser test (`web/e2e/calendar.spec.ts`) on a Windows machine with the repo's `npx playwright test`.
+- **Steps taken:** `npm install` in `web/`, then `npx playwright test calendar.spec.ts` with `HUDDLE_UVICORN` pointing at the venv's `uvicorn.exe`.
+- **Expected:** The suite starts, or a clear list of prerequisites.
+- **Actual:** It stops immediately: "You are running Node.js 18.17.1. Playwright requires Node.js 20 or higher." The `package.json` has no `engines` field to say so before `npm install`, and the Playwright config's `webServer.command` uses `rm -f` and the Makefile uses `.venv/bin`, which a Windows shell (cmd or PowerShell) can't run.
+- **Severity:** Medium for a contributor on Windows; none in CI (Linux, Node 20).
+- **Workaround:** Upgraded to Node 24 (anything from 20 up works), and rewrote `web/playwright.config.ts` to use Playwright's own `cwd` and `env` options and a `node -e` cleanup instead of `rm` and inline variables, with a Windows default for the `uvicorn` path. The full suite then ran on Windows: 33 passed, 1 skipped (needs the optional voice packages).
+- **Suggestion:** Add `"engines": {"node": ">=20"}` to `web/package.json` (not done yet), and have Playwright's `webServer` docs show a cross-platform example, since the common `rm -f` and `VAR=x cmd` snippets don't run in cmd or PowerShell.

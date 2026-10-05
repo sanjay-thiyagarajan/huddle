@@ -173,6 +173,13 @@ huddle/
 ### Stretch (cut in this order, last item first)
 1. Family memory log (next-day private question, saved card per event).  2. Friend-trip mode.  3. Fairness record across rounds.  4. SMS delivery (US needs A2P 10DLC; skip).  5. Secure multi-party computation (out of scope).
 
+### Extensions added after the plan (2026-10-04)
+The repo now also has a household chore planner and a private "My time" schedule (see README and `docs/scheduling.md`). On
+2026-10-04 the owner asked for calendar files, a daily briefing and reminders, built in the same style as the scheduling code:
+- **Calendar files:** read an `.ics` file (or a read-only calendar address) as the person's own private commitments, and export commitments or chores as `.ics`. This is **not** a sync with, or sign-in to, Outlook, Google or Apple Calendar; "calendar access" below still means that, and stays out of scope.
+- **Daily briefing:** `get_daily_briefing`, "what's my day", and a Today card: the caller's own items only.
+- **Opt-in reminders:** starting soon, and a Sunday digest, through the existing notifier; no Alexa notification is claimed.
+
 ### Out of scope (do not build)
 Itineraries, bookings, expense splitting, calendar access, real-time flight/hotel prices (use mock data), accounts and login beyond signed round tokens.
 

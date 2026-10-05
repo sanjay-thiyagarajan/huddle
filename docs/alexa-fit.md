@@ -20,6 +20,11 @@
 
 6. **The rules travel with the server.** A real assistant would only have what the MCP server sends. So the privacy gate, the no-read-back rule and consent are in the server's `instructions` (returned at initialize), and every tool carries a title and behaviour hints. The simulator follows the same rules, but they are not only in the simulator.
 
+## Your day and reminders, by voice
+- **What a real assistant would do:** ask `get_daily_briefing` (or `ask_schedule_agent` with "what's my day") and read the returned `say` sentence aloud. The server writes it for speaking, and it only contains the caller's own items. This is how the design is meant to work; it has **not** been tried on a real Alexa+ device.
+- **In the simulator** (My time page): **Read my day aloud** speaks the briefing; the scheduling agent box has a **Speak** microphone button (Chrome) and, with **Speak replies and reminders aloud** ticked, speaks each reply and the starting-soon reminder once. This is the browser's own voice standing in for the assistant, and it works only while the page is open. It is off by default because people nearby may hear your commitments.
+- **What is not possible, and not claimed:** Huddle cannot make a speaker announce "your meeting starts in 30 minutes" by itself. The MCP connection only answers when the assistant asks; a spoken reminder with nobody asking would need Alexa's own notification features, which are not available here. Reminders are a banner, an optional browser pop-up and optional email.
+
 ## What is simulated or unverified (do not overclaim)
 - **The Alexa+ experience is a web simulator.** Alexa+ developer tools are preview and select-partner only, so none of this has run on a real device.
 - In the simulator, "speaking" is typed text with an optional microphone (browser speech recognition) and browser text-to-speech.

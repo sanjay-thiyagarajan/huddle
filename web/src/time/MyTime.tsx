@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { listen, speak, speechOutSupported, speechSupported } from "../api";
 import { homeApi } from "../home/homeApi";
 import { slotLabel } from "../WhenAnswer";
 import { CIRCLES, circleLabel, timeApi } from "./timeApi";
-import type { AddOut, Circle, Clash, Gathering, MyTime as MyTimeData, Options, TimeItem, TimeRules } from "./timeApi";
+import type { AddOut, Briefing, Circle, Clash, DueReminder, Gathering, ImportOut, MyTime as MyTimeData, Options, ReminderKind, Reminders as RemindersData, TimeItem, TimeRules } from "./timeApi";
 
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
@@ -14,6 +15,16 @@ export default function MyTime({ token }: { token: string }) {
   const [data, setData] = useState<MyTimeData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [week, setWeek] = useState<string | undefined>(undefined);
+  const [perm, setPerm] = useState<NotificationPermission | "unsupported">(
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+  const [aloud, setAloud] = useState<boolean>(() => {
+    try { return localStorage.getItem("huddle-speak-time") === "1"; } catch { return false; }
+  });
+  const changeAloud = (on: boolean) => {
+    setAloud(on);
+    if (!on && speechOutSupported()) window.speechSynthesis.cancel();
+    try { localStorage.setItem("huddle-speak-time", on ? "1" : "0"); } catch { /* storage unavailable: the choice lasts for this page only */ }
+  };
   const refresh = useCallback(async () => {
     try { setData(await timeApi.get(token, week)); setError(null); } catch (e) { setError((e as Error).message); }
   }, [token, week]);
@@ -30,7 +41,15 @@ export default function MyTime({ token }: { token: string }) {
     <div className="home-layout">
       <div className="home-private">
         <p className="fine">Only you can see this page: what you've committed to, your rules, and how you'd answer. Others only ever see a result, never your schedule.</p>
-        <TimeAgent token={token} onChanged={() => void refresh()} />
+        {speechOutSupported() && (
+          <label className="consent">
+            <input type="checkbox" checked={aloud} onChange={(e) => changeAloud(e.target.checked)} />
+            <span>Speak replies and reminders aloud. This is your browser's voice standing in for the assistant, it works only while this page is open, and people nearby may hear your commitments.</span>
+          </label>
+        )}
+        <StartingSoon due={data.reminders.due} perm={perm} aloud={aloud} />
+        <Today token={token} refreshKey={data.items.length} />
+        <TimeAgent token={token} aloud={aloud} onChanged={() => void refresh()} />
         <div className="modes" role="group" aria-label="Which week">
           <button className="chip" onClick={() => shift(-7)}>Previous week</button>
           <button className="chip" onClick={() => setWeek(undefined)}>This week</button>
@@ -42,6 +61,8 @@ export default function MyTime({ token }: { token: string }) {
       </div>
       <div className="home-shared">
         <Summary token={token} data={data} />
+        <CalendarFiles token={token} feed={data.feed} onChanged={() => void refresh()} />
+        <Reminders token={token} reminders={data.reminders} perm={perm} onAllow={() => void Notification.requestPermission().then(setPerm)} onChanged={() => void refresh()} />
         <FindTime token={token} data={data} onChanged={() => void refresh()} />
         <Rules token={token} rules={data.rules} onChanged={() => void refresh()} />
       </div>
@@ -49,10 +70,11 @@ export default function MyTime({ token }: { token: string }) {
   );
 }
 
-function TimeAgent({ token, onChanged }: { token: string; onChanged: () => void }) {
+function TimeAgent({ token, aloud, onChanged }: { token: string; aloud: boolean; onChanged: () => void }) {
   const [text, setText] = useState("");
   const [lines, setLines] = useState<{ who: "you" | "agent"; text: string }[]>([]);
   const [quick, setQuick] = useState<string[]>([]);
+  const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function send(utterance: string) {
     setError(null);
@@ -60,6 +82,7 @@ function TimeAgent({ token, onChanged }: { token: string; onChanged: () => void 
     try {
       const out = await timeApi.say(token, utterance);
       setLines((l) => [...l.slice(-7), { who: "agent", text: out.say }]);
+      if (aloud) speak(out.say);
       setQuick(out.quick_replies);
       if (out.state_changed) onChanged();
     } catch (e) { setError((e as Error).message); }
@@ -73,6 +96,12 @@ function TimeAgent({ token, onChanged }: { token: string; onChanged: () => void 
           <input value={text} autoComplete="off" onChange={(e) => setText(e.target.value)} />
         </label>
         <button className="ghost" disabled={!text.trim()}>Send</button>
+        {speechSupported() && (
+          <button type="button" className="ghost" aria-pressed={listening} onClick={() => {
+            setListening(true); let heard = "";
+            listen((t) => { heard = t; }, () => { setListening(false); if (heard.trim()) void send(heard.trim()); });
+          }}>{listening ? "Listening" : "Speak"}</button>
+        )}
       </form>
       <div role="log" aria-live="polite" aria-label="What the scheduling agent says" className="captions">
         {lines.length === 0 ? <p className="fine">Replies appear here.</p> : lines.map((l, i) => <p key={i} className="caption"><strong>{l.who === "you" ? "You" : "Agent"}:</strong> {l.text}</p>)}
@@ -311,6 +340,173 @@ function GatheringCard({ token, g, onChanged }: { token: string; g: Gathering; o
       )}
       {error && <p className="error" role="alert">{error}</p>}
     </div>
+  );
+}
+
+/** Today at a glance: the same sentences the assistant reads aloud for "what's my day". */
+function Today({ token, refreshKey }: { token: string; refreshKey: number }) {
+  const [b, setB] = useState<Briefing | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { timeApi.briefing(token).then((x) => { setB(x); setError(null); }).catch((e: Error) => setError(e.message)); }, [token, refreshKey]);
+  return (
+    <section className="home-panel" aria-labelledby="today-h">
+      <h3 id="today-h">Today</h3>
+      {b && <p role="status">{b.say}</p>}
+      {b && b.items.length > 0 && (
+        <ul className="audit" aria-label="Today's commitments">
+          {b.items.map((i) => <li key={`${i.id}-${i.start}`}><strong>{hhmm(i.start)}</strong> {i.title} <span className="fine">({circleLabel(i.circle)})</span></li>)}
+        </ul>
+      )}
+      {b && speechOutSupported() && <button className="ghost" onClick={() => speak(b.say)}>Read my day aloud</button>}
+      <p className="fine">Ask the assistant "what's my day" and it reads this aloud. It only ever covers your own things.</p>
+      {error && <p className="error" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+function download(filename: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/calendar" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Read an .ics file (or follow a calendar address), and hand your commitments or chores back as .ics. */
+function CalendarFiles({ token, feed, onChanged }: { token: string; feed: MyTimeData["feed"]; onChanged: () => void }) {
+  const [circle, setCircle] = useState<Circle>("personal");
+  const [address, setAddress] = useState("");
+  const [result, setResult] = useState<ImportOut | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  async function run(fn: () => Promise<ImportOut | void>) {
+    setError(null); setResult(null);
+    try {
+      const out = await fn();
+      if (out && typeof out.imported === "number") setResult({ ...out, notes: out.notes ?? [] });
+      onChanged();
+    } catch (e) { setError((e as Error).message); }
+  }
+  async function readFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 2_000_000) { setError("That calendar file is too large (limit 2 MB)."); return; }
+    await run(async () => timeApi.importIcs(token, await file.text(), circle));
+  }
+  async function save(kind: "my_time" | "chore_plan") {
+    setError(null);
+    try { const out = await timeApi.exportIcs(token, kind); download(out.filename, out.ics); } catch (e) { setError((e as Error).message); }
+  }
+  return (
+    <section className="home-panel" aria-labelledby="cal-h">
+      <h3 id="cal-h">Calendar files</h3>
+      <p className="fine">Export your calendar from Outlook, Google or Apple as an .ics file and read it in here. It becomes your own private commitments; nobody else sees it, and the file itself isn't kept.</p>
+      <div className="row">
+        <label>These are mostly
+          <select value={circle} onChange={(e) => setCircle(e.target.value as Circle)}>{CIRCLES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        </label>
+        <label className="grow">Calendar file (.ics)
+          <input type="file" accept=".ics,text/calendar" onChange={(e) => { void readFile(e.target.files?.[0]); e.target.value = ""; }} />
+        </label>
+      </div>
+      {result && (
+        <div className="banner note" role="status">
+          <p>Read {result.imported} new, {result.updated} updated, {result.unchanged} unchanged.</p>
+          {result.notes.map((n) => <p key={n} className="fine">{n}</p>)}
+        </div>
+      )}
+      <h4>Follow a calendar address</h4>
+      <p className="fine">Outlook and Google can publish a read-only calendar link. Paste it and Huddle re-reads it about once an hour. Treat the link like a password: it's never shown again.</p>
+      {feed.subscribed ? (
+        <p role="status">Following a calendar ({feed.last_status}{feed.last_fetched ? `, last read ${feed.last_fetched.replace("T", " ")}` : ""}).{" "}
+          <button className="ghost" onClick={() => void run(() => timeApi.refreshFeed(token))}>Read it again now</button>{" "}
+          <button className="ghost" onClick={() => void run(async () => { await timeApi.subscribe(token, null, circle); })}>Stop following</button></p>
+      ) : (
+        <form className="row" onSubmit={(e) => { e.preventDefault(); const u = address.trim(); if (u) { setAddress(""); void run(() => timeApi.subscribe(token, u, circle)); } }}>
+          <label className="grow">Calendar address (https:// or webcal://)
+            <input type="password" autoComplete="off" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </label>
+          <button className="ghost" disabled={!address.trim()}>Follow</button>
+        </form>
+      )}
+      <h4>Take it with you</h4>
+      <div className="row">
+        <button className="ghost" onClick={() => void save("my_time")}>Export my commitments</button>
+        <button className="ghost" onClick={() => void save("chore_plan")}>Export my chores this week</button>
+      </div>
+      <p className="fine">Chores are added as all-day entries, because a chore has a due date but no time of day. Times are kept as written, with no time zone.</p>
+      {error && <p className="error" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+const soonText = (d: DueReminder) =>
+  `${d.title} ${d.minutes_away === 0 ? "starts now" : `starts in ${d.minutes_away} minute${d.minutes_away === 1 ? "" : "s"}`} (${hhmm(d.start)})`;
+
+/** The "starting soon" reminder, shown while this page is open: a banner, and a browser pop-up if allowed. */
+function StartingSoon({ due, perm, aloud }: { due: DueReminder[]; perm: NotificationPermission | "unsupported"; aloud: boolean }) {
+  const told = useRef(new Set<string>());
+  const spoken = useRef(new Set<string>());
+  useEffect(() => {
+    if (!aloud) return;
+    for (const d of due) {
+      const key = `${d.id}:${d.start}`;
+      if (spoken.current.has(key)) continue;
+      spoken.current.add(key);
+      speak(`Reminder: ${soonText(d)}.`);
+    }
+  }, [due, aloud]);
+  useEffect(() => {
+    if (perm !== "granted") return;
+    for (const d of due) {
+      const key = `huddle-soon-${d.id}:${d.start}`;
+      if (told.current.has(key)) continue;
+      told.current.add(key);
+      try { if (sessionStorage.getItem(key)) continue; sessionStorage.setItem(key, "1"); } catch { /* storage unavailable: the in-memory set still stops repeats */ }
+      new Notification("Huddle", { body: soonText(d) });
+    }
+  }, [due, perm]);
+  if (due.length === 0) return null;
+  return (
+    <div className="banner warn" role="alert" aria-label="Starting soon">
+      {due.map((d) => <p key={`${d.id}-${d.start}`}><strong>{soonText(d)}</strong></p>)}
+    </div>
+  );
+}
+
+/** Opt-in reminders: a banner (and pop-up) while this page is open, and email only if the host set it up. */
+function Reminders({ token, reminders, perm, onAllow, onChanged }: { token: string; reminders: RemindersData; perm: NotificationPermission | "unsupported"; onAllow: () => void; onChanged: () => void }) {
+  const [start, setStart] = useState(reminders.quiet_start ?? "22:00");
+  const [end, setEnd] = useState(reminders.quiet_end ?? "07:00");
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const offset = -new Date().getTimezoneOffset();
+  async function save(changes: Partial<RemindersData>) {
+    setError(null); setSaved(false);
+    try { await timeApi.reminders(token, { utc_offset_minutes: offset, ...changes }); setSaved(true); onChanged(); } catch (e) { setError((e as Error).message); }
+  }
+  const toggle = (k: ReminderKind) => save({ kinds: reminders.kinds.includes(k) ? reminders.kinds.filter((x) => x !== k) : [...reminders.kinds, k] });
+  return (
+    <section className="home-panel" aria-labelledby="rem-h">
+      <h3 id="rem-h">Reminders</h3>
+      <p className="fine">Off until you turn them on. "Starting soon" shows as a banner at the top of this page (and a pop-up if you allow it) <strong>only while this page is open</strong>. It also arrives by email, but only if the host set up email and gave Huddle your address. Nothing is sent to a speaker.</p>
+      <fieldset className="chips">
+        <legend>Remind me</legend>
+        <button type="button" className="chip" aria-pressed={reminders.kinds.includes("starting_soon")} onClick={() => void toggle("starting_soon")}>When something starts soon</button>
+        <button type="button" className="chip" aria-pressed={reminders.kinds.includes("digest")} onClick={() => void toggle("digest")}>A week-ahead note on Sunday evening</button>
+      </fieldset>
+      <div className="row">
+        <label>Quiet from<input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></label>
+        <label>until<input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
+        <button className="ghost" onClick={() => void save({ quiet_start: start, quiet_end: end })}>Set quiet hours</button>
+        <button className="ghost" disabled={!reminders.quiet_start} onClick={() => void save({ quiet_start: null, quiet_end: null })}>No quiet hours</button>
+      </div>
+      {reminders.kinds.includes("starting_soon") && perm === "default" && (
+        <p className="fine"><button className="ghost" onClick={onAllow}>Notify me on this device</button> Get a pop-up too, while this page is open in a tab.</p>
+      )}
+      {reminders.kinds.includes("starting_soon") && perm === "denied" && <p className="fine">Pop-ups are blocked for this site in your browser; the banner still shows.</p>}
+      {reminders.quiet_start && <p className="fine">Quiet from {reminders.quiet_start} until {reminders.quiet_end}.</p>}
+      <p className="fine">Your times are floating, so Huddle uses your browser's clock to work out "soon" (UTC{offset >= 0 ? "+" : ""}{offset / 60}).</p>
+      {saved && <p className="banner note" role="status">Saved.</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+    </section>
   );
 }
 

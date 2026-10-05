@@ -110,6 +110,16 @@ export function listen(onText: (t: string) => void, onEnd: () => void): () => vo
   return () => rec.stop();
 }
 
+/** Say something with the browser's voice (a stand-in for the assistant's). Replaces anything still being said. */
+export function speechOutSupported(): boolean {
+  return typeof window !== "undefined" && "speechSynthesis" in window;
+}
+export function speak(text: string): void {
+  if (!speechOutSupported() || !text) return;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+}
+
 export const EVERYDAY_ATTRS: [string, string][] = [
   ["outdoors", "Outdoors"], ["crowds", "Crowds"], ["long_drive", "Long drive"],
   ["early_start", "Early start"], ["physical", "Physical effort"], ["alcohol", "Alcohol"],
